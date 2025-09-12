@@ -1,0 +1,19 @@
+
+/*
+ *  Author: John Doe
+ *  Model Name: IEC_fourpass_Auth.spthy
+ *  Status: DEVELOPMENTAL
+ *
+ *  Comments:
+ */
+
+theory ISO_IEC
+begin
+
+builtins: symmetric-encryption
+functions: 
+equations: 
+
+
+
+end
