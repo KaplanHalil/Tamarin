@@ -22,3 +22,36 @@ rule Register_pk:
 [ Fr(~ltk) ]
 -->
 [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)) ]
+
+/* 
+C -> S: aenc(k, pkS)
+C <- S: h(k)
+We model it using the following three rules.
+
+*/
+
+// Start a new thread executing the client role, choosing the server
+// non-deterministically.
+rule Client_1:
+[ Fr(~k) // choose fresh key
+, !Pk($S, pkS) // lookup public-key of server
+]
+-->
+[ Client_1( $S, ~k ) // Store server and key for next step of thread
+, Out( aenc(~k, pkS) ) // Send the encrypted session key to the server
+]
+rule Client_2:
+[ Client_1(S, k) // Retrieve server and session key from previous step
+, In( h(k) ) // Receive hashed session key from network
+]
+--[ SessKeyC( S, k ) ]-> // State that the session key 'k'
+[] // was setup with server 'S'
+// A server thread answering in one-step to a session-key setup request from
+// some client.
+rule Serv_1:
+[ !Ltk($S, ~ltkS) // lookup the private-key
+, In( request ) // receive a request
+]
+--[ AnswerRequest($S, adec(request, ~ltkS)) ]-> // Explanation below
+[ Out( h(adec(request, ~ltkS)) ) ] // Return the hash of the
+// decrypted request.
