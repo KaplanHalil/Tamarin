@@ -22,3 +22,14 @@ rule Register_pk:
 [ Fr(~ltk) ]
 -->
 [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)) ]
+
+/*we allow the adversary to retrieve any public key 
+using the following rule. Essentially, it reads a 
+public-key database entry and sends the public key 
+to the network using the built-in
+fact Out */
+
+rule Get_pk:
+[ !Pk(A, pubkey) ]
+-->
+[ Out(pubkey) ]
