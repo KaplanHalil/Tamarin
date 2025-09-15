@@ -16,6 +16,10 @@ builtins: hashing, asymmetric-encryption
     agent A and its private key ~ltk
   * !Pk($A, pk(~ltk)) associates 
     agent A and its public key pk(~ltk)
+
+  Note that # denotes a temporal variable and @i can be read as ”at time
+  point i”. Also note that @i is short for @ #i.
+
  */
 
 rule Register_pk:
