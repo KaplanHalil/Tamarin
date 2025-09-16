@@ -1,0 +1,75 @@
+theory DH
+begin
+builtins: diffie-hellman
+    
+    // Define a rule to create identity of a client 
+    rule create_identity:
+        [] --> [ !Id($C) ]
+    
+
+
+    rule client_hello:
+        let
+            A = g^~a
+        in
+        [!Id($C), !Id($S), Fr(~a)]
+        -->
+        [ ClientWaiting($C, $S, ~a),Out(<'client_hello', $C, $S, A>) ]
+
+
+    rule server_hello:
+        let
+            B = g ^ ~b 
+            secret = A ^ b 
+        in 
+        [!Id($C), !Id($S), Fr(~b),In(<'client_hello', $C, $S, A>)]
+        --[ServerCreatedSession(C, $S, secret)]->
+        [ServerSession(C, $S, secret), Out(<'server_hello', C, $S, B>) ]
+
+
+    rule client_receive_hello:
+        let
+            secret = B^~a
+        in
+        [ !Id($C), !Id(S),ClientWaiting($C, S, ~a),In(<'server_hello', $C, S, B>) ]
+        --[ ClientCreatedSession($C, S, secret) ]->
+        [ ClientSession($C, S, secret) ]
+
+    /* 
+    
+    There exists a trace–a sequence of rule applications–such that we can
+    have a client C, a server S and a secret secret such that client and server created a
+    session with those identifiers at moments #i and #j and both derived the same secret
+    for this session.
+    
+    */
+    lemma can_be_run:
+        exists-trace
+    ”
+    (Ex C S secret #i #j .
+    ( ServerCreatedSession(C, S, secret) @ #i ) &
+    ( ClientCreatedSession(C, S, secret) @ #j ) )
+    ”
+
+     /* 
+    there are no moments #k1 and #k2 such that the at-
+    tacker gained knowledge of secret1 and secret2. 
+    
+    */
+    lemma man_in_the_middle:
+        all-traces
+    ”
+    All C S secret1 secret2 #i #j .
+    (
+    ServerCreatedSession(C, S, secret2) @ #j &
+    ClientCreatedSession(C, S, secret1) @ #i &
+    #j < #i &
+    not(C = S)
+    )
+    ==>
+    ( not(Ex #k1 #k2 .
+    K(secret1) @ #k1 &
+    K(secret2) @ #k2) )
+    ”
+
+end

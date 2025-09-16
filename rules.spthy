@@ -16,9 +16,26 @@ builtins: hashing, asymmetric-encryption
     agent A and its private key ~ltk
   * !Pk($A, pk(~ltk)) associates 
     agent A and its public key pk(~ltk)
+  
+  -------------------------------------------------------
 
   Note that # denotes a temporal variable and @i can be read as ”at time
   point i”. Also note that @i is short for @ #i.
+
+  -------------------------------------------------------
+
+  The actual labeled rewriting rule is specified with an arrow
+  notation, [ ] --[ ]-> [ ] where the first bracket specifies the premise facts which
+  the rule consumes, the second optional bracket specifies the action facts which are
+  created upon application of the rule and the third and last bracket is used for specifying
+  the conclusion facts which are created by application of the rule.
+
+  1 rule Rule Identifier :
+  2 [ Premise Facts ]
+  3 --[ Action Facts ]->
+  4 [ Conclusion Facts ]
+
+  -------------------------------------------------------
 
  */
 
