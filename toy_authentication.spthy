@@ -2,7 +2,7 @@ theory toy_authentication
 
 begin 
 
-builtins: hashing, asymmetric-encryption
+builtins: asymmetric-encryption, signing
 
 
 rule Register_pk:
@@ -11,5 +11,13 @@ rule Register_pk:
 [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)) ]
 
 
+rule generate_ID:
+[]
+-->
+[ID($A,$IDA)]
 
+rule A0:
+[Fr(~RNa), ID($A,$IDA)]
+-->
+[State($IDA), Out(<$IDA, $IDB ~RNa>) ]
 end
