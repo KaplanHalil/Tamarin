@@ -1,0 +1,15 @@
+theory toy_authentication
+
+begin 
+
+builtins: hashing, asymmetric-encryption
+
+
+rule Register_pk:
+[ Fr(~ltk) ]
+-->
+[ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)) ]
+
+
+
+end
