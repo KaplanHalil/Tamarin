@@ -40,5 +40,17 @@ rule B0:
 -->
 [StateB(~psk,~RNb,ss_b), Out(<sifreli_RNB, sifreliSS_b>)]
 
+rule A1:
+
+    let
+        RNB = sdec(sifreli_RNB,~psk)
+        ss_b= sdec(sifreliSS_b)
+        ss_a=h(<~RNa,RNB>)
+        sifreliSS_a = senc(ss_a,~psk)
+    in
+
+[In(<sifreli_RNB, sifreliSS_b>),StateA(~psk,~RNa)]
+--[_restict()]->
+[]
 end
 
