@@ -1,0 +1,33 @@
+theory votingSimpleNonDet 
+begin
+
+/*
+ * Protocol:     Voting protocol, very simplistic, to demonstrate Observational Equivalence
+ * Modeler:      Jannik Dreier and Ralf Sasse
+ * Described in: Tamarin-Prover book
+ * Date:         June 2023
+ *
+ * Status: 	working
+// Observational equivalence is "proven" automatically in less than 1 second, for this model, but note that there is no result output, meaning it is not very realistic.
+ */
+
+functions: penc/3, pdec/2, pk/1
+
+equations: pdec(penc(m,pk(k),r), k) = m
+
+rule gen:
+  [ Fr(~k) ]
+--[ ]->
+  [ !Key(~k), Out(pk(~k)) ]
+
+rule voteDiff:
+  let vote = diff('A','B')
+  in
+  [ !Key(k), Fr(~r1) ]
+--[ ]->
+  [ Out(penc(vote, pk(k),~r1)) ]
+
+// STORY: replaced deterministic version with non-deterministic version of asymmetric encryption, this results in a proof of Tamarin for this model, which is valid, but the model itself is not fit for purpose.
+// That is because this model is too simplistic, it does not model the expected full protocol. Namely, there will be a tallying authority in reality, so we have to add that and re-check the result.
+
+end

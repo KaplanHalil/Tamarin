@@ -1,0 +1,17 @@
+theory PKIdef begin
+
+builtins: asymmetric-encryption, signing
+
+// Public key infrastructure
+rule Register_pk:
+  [ Fr(~ltk) ]
+    -->
+  [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)), Out(pk(~ltk)) ]
+
+// Corruption of the private key associated to a public-key
+rule corrupt_public_key:
+  [ !Ltk(A, k) ]
+--[ Reveal(A) ]->
+  [ Out(k) ]
+
+end

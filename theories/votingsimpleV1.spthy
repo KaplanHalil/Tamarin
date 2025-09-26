@@ -1,0 +1,38 @@
+theory votingSimple 
+begin
+
+/*
+ * Protocol:     Voting protocol, very simplistic, to demonstrate Observational Equivalence
+ * Modeler:      Jannik Dreier and Ralf Sasse
+ * Described in: Tamarin-Prover book
+ * Date:         June 2023
+ *
+ * Status: 	working
+// Observational equivalence is disproven automatically in less than 1 second, in multiple different ways, use 'A' for all solutions.
+ */
+
+functions: aenc/2, adec/2, pk/1
+
+equations: adec(aenc(m,pk(k)), k) = m
+
+rule gen:
+  [ Fr(~k) ]
+--[ ]->
+  [ !Key(~k), Out(pk(~k)) ]
+
+rule voteDiff:
+  let vote = diff('A','B')
+  in
+  [ !Key(k) ]
+--[ Secret(vote) ]->
+  [ Out(aenc(vote, pk(k))) ]
+
+lemma secrecy:
+  "All v #i. Secret(v)@i ==> not Ex #j. K(v)@j"
+
+// STORY: simple voting protocol, one party that emits either A or B
+// 1. secrecy (trace property) is meaningless, as both A and B are public values, and thus fails. This does not correspond to the property one intuitively would like here.
+// 2. Additionally, indistinguishability of left/right for the switching voter fails (Tamarin shows attack) due to comparison of adversary-created encryption with either of the candidate names
+// ==> as it is deterministic, so make it non-deterministic
+
+end

@@ -1,0 +1,67 @@
+theory votingSimpleNonDetAuthoritySwapSigCheck 
+begin
+
+/*
+ * Protocol:     Voting protocol, very simplistic, to demonstrate Observational Equivalence
+ * Modeler:      Jannik Dreier and Ralf Sasse
+ * Described in: Tamarin-Prover book
+ * Date:         June 2023
+ *
+ * Status: 	working
+// Observational equivalence is disproven automatically (with --auto-sources, use 'A' for all violations).
+ */
+
+functions: penc/3, pdec/2, pk/1, sign/2, verify/3, true/0
+
+equations: pdec(penc(m,pk(k),r), k) = m,
+                  verify(sign(m,k),m,pk(k)) = true
+
+rule gen:
+  [ Fr(~k) ]
+--[ ]->
+  [ !Key(~k), Out(pk(~k)) ]
+
+rule genVoterOther:
+  [Fr(~k)]
+--[]->
+  [!VoterKeyOther(~k), Out(pk(~k))]
+
+rule genVoterDiff:
+  [Fr(~k)]
+--[]->
+  [!VoterKeyDiff(~k), Out(pk(~k))]
+
+rule voteOther:
+  let votecand = diff('B','A')
+       vote = penc(votecand, pk(authorityk),~r1)
+       votesigned = <vote, sign(vote,~k)>
+  in
+  [ !Key(authorityk), Fr(~r1), !VoterKeyOther(~k) ]
+--[ ]->
+  [ Out(votesigned) ]
+
+rule voteDiff:
+  let votecand = diff('A','B')
+       vote = penc(votecand, pk(authorityk),~r1)
+       votesigned = <vote, sign(vote,~k)>
+  in
+  [ !Key(authorityk), Fr(~r1), !VoterKeyDiff(~k) ]
+--[ ]->
+  [ Out(votesigned) ]
+
+rule authority:
+  let voteA = penc(X, pk(k), r1)
+      voteAsigned= <voteA, sign(voteA,kA)>
+      voteB = penc(Y, pk(k), r2)
+      voteBsigned= <voteB, sign(voteB,kB)>
+  in
+  [ !VoterKeyOther(kA), !VoterKeyDiff(kB), !Key(k),
+    In(< voteAsigned , voteBsigned  >) ]
+--[ ]->
+  [ Out(<X,Y>) ]
+  
+
+// STORY: now the previous attack is not found anymore (output of two A or two B cannot happen), but still can find an issue here: the total output on left is B,A while on right is A,B. This is a false attack based on the authority leaking the ORDER of votes. Next improvement: output as multiset
+// Note that many further attacks exist where just one of the two outputs from one of the specific rules is checked but the essence of what goes wrong is the above
+
+end

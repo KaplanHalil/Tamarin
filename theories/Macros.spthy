@@ -1,0 +1,27 @@
+theory Macros begin
+
+builtins: asymmetric-encryption
+
+rule Client:
+  [ !Ltk($S, ~ltkS), Fr(~m) ]
+-->
+  [ Out( <$S, aenc(~m, ~ltkS)> ) ]
+
+rule Serv:
+  [ !Ltk($S, ~ltkS), In( <$S, aenc(req, ~ltkS)> ) ]
+-->
+  [ Out( req ) ]
+
+macros: msg1(X, m, key) = <X, aenc(m, key)>
+
+rule Client_1:
+  [ !Ltk($S, ~ltkS), Fr(~m) ]
+-->
+  [ Out( msg1($S, ~m, ~ltkS) ) ]
+
+rule Serv_1:
+  [ !Ltk($S, ~ltkS), In( msg1($S, req, ~ltkS) ) ]
+-->
+  [ Out( req ) ]
+
+end

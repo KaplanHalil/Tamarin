@@ -1,0 +1,30 @@
+theory DependencyGraph
+begin
+
+functions: enc/2, dec/2
+equations: dec(enc(m, k), k) = m
+
+rule Init:
+  [ Fr(~a), Fr(~k) ]
+  --[ ]->
+  [ K(~k), St(~a, ~k), Out( enc(~a,~k) ) ]
+
+rule End:
+  [ St(a, k), In(<a,a>) ]
+  --[ Fin(a) ]->
+  []
+
+rule Reveal:
+  [ K(x) ]
+  --[ Rev(x) ]->
+  [ Out(x) ]
+
+lemma CannotReveal:
+  "not( Ex y #i. Rev(y)@#i )"
+
+lemma Execute:
+  exists-trace
+  "Ex a #i. Fin(a)@#i"
+
+
+end

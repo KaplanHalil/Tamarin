@@ -1,0 +1,42 @@
+theory RestrictionsPredicatesElse begin
+
+functions: f/1, g/2
+
+predicates: ConditionA(x) <=> ( Ex z. x = f(z) ),
+            ConditionB(x) <=> ( Ex z. x = g('1',z) )
+
+rule AttackerProvides:
+  [ In(X) ]-->[ CaseInput(X) ]
+
+rule RuleA:     // Case A
+  [ CaseInput(X) ]
+--[ Choice('A',X), _restrict(ConditionA(X)) ]->
+  []
+
+rule RuleB:     // Case B
+  [ CaseInput(X) ]
+--[ Choice('B',X), _restrict(ConditionB(X)) ]->
+  []
+
+rule RuleC:     // Case C "else"
+  [ CaseInput(X) ]
+--[ Choice('C',X)
+  , _restrict(not ( ConditionA(X) | ConditionB(X) )) 
+  ]->
+  []
+
+// The lemma expresses that the rules are only enabled for non-overlapping sets for X
+lemma RulesPartition:
+  "All case1 case2 x #i #j. 
+    Choice(case1,x)@i & Choice(case2,x)@j 
+      ==> (case1 = case2)"
+
+// We can reach each case
+lemma CanReachA:
+  exists-trace "Ex x #i. Choice('A',x)@i"
+lemma CanReachB:
+  exists-trace "Ex x #i. Choice('B',x)@i"
+lemma CanReachC:
+  exists-trace "Ex x #i. Choice('C',x)@i"
+  
+end

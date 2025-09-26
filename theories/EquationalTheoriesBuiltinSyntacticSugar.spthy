@@ -1,0 +1,27 @@
+theory EquationalTheoriesBuiltinSyntacticSugar begin
+
+builtins: hashing
+functions: h/1
+
+builtins: asymmetric-encryption
+functions: pk/1, adec/2, aenc/2
+equations:
+    adec(aenc(m, pk(k)), k) = m
+
+builtins: symmetric-encryption
+functions: sdec/2, senc/2
+equations:
+    sdec(senc(m, k), k) = m
+
+builtins: signing
+functions: true/0, pk/1, sign/2, verify/3
+equations:
+    verify(sign(m, k), m, pk(k)) = true
+
+builtins: revealing-signing
+functions: true/0, pk/1, getMessage/1,revealSign/2, revealVerify/3
+equations:
+    getMessage(revealSign(m, k)) = m,
+    revealVerify(revealSign(m, k), m, pk(k)) = true
+
+end

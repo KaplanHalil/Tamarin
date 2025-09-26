@@ -1,0 +1,31 @@
+theory neutral_element_check
+begin
+
+builtins: diffie-hellman
+
+rule any_element:
+  let key = v^~s
+  in
+  [ In(v), Fr(~s) ]
+  --[ UncheckedNeutralKey(key) ]->
+  [ ]
+
+rule no_neutral_element:
+  let v = 'g'^x // pattern matching structure of v to exclude neutral element
+      key = v^~s
+  in
+  [ In(v), Fr(~s) ]
+  --[ CheckedNonNeutralKey(key) ]->
+  [ ]
+
+// Lemma is false: if adversary sends the neutral element, 
+// it can infer the key
+lemma secret_key:
+  "All #i x. UncheckedNeutralKey(x)@i ==> not Ex #j. K(x)@j"
+
+// Lemma holds: if received v is of the form 'g'^x, 
+// it is not the neutral element
+lemma secret_key_with_check:
+  "All #i k. CheckedNonNeutralKey(k)@i ==> not Ex #j. K(k)@j"
+
+end

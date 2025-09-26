@@ -1,0 +1,58 @@
+theory VariableNamesAndLet begin
+
+builtins: symmetric-encryption, hashing
+
+rule CreateVarA:
+  [ Fr(~tid), In(<X,Y>) ]
+--[]->
+  [ State(~tid, $A), S(<X,Y>) ]
+
+rule UseVarA:
+  [ State(id, B), S(<Y,X>) ]
+--[]->
+  [ ]
+
+rule WithoutLetBinding:
+  [ State(id, A), Fr(~x), Fr(~k) ]
+--[ Sent(senc(~x, ~k)) ]->
+  [ State2(id, A, ~x, ~k), Out(senc(~x,~k)) ]
+
+rule WithLetBinding:
+  let msg = senc(~x, ~k)
+  in
+  [ State(id, A), Fr(~x), Fr(~k) ]
+--[ Sent(msg) ]->
+  [ State2(id, A, ~x, ~k), Out(msg) ]
+
+rule ComplicatedLetBinding:
+  let x = y
+      y = z
+      w = y
+  in
+  [ F(x, y, w) ]
+--[ ]->
+  [ ]
+
+rule ConsecutiveLetBinding:
+  let msg = senc(~x, ~k)
+      triplemsg = <msg,msg,msg>
+      toolarge = <triplemsg,triplemsg>
+  in
+  [ State(id, A), Fr(~x), Fr(~k) ]
+--[ Sent(toolarge) ]->
+  [ State2(id, A, ~x, ~k), Out(toolarge) ]
+
+macros: macro1(x) = h(x), macro2(x, y) = senc(x, y), macro3() = $A,
+        macro4(x, y) = macro2(macro1(x), y)
+
+rule Macros1:
+  [ State(id, A), Fr(~x), Fr(~k) ]
+--[ Sent(macro4(~x,~k)) ]->
+  [ Out(macro4(~x,~k)) ]
+
+rule Macros2:
+  [ State(id, B), In(macro4(x,k)) ]
+--[ Recv(macro4(x,k)) ]->
+  [ ]
+
+end

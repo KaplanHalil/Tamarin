@@ -1,0 +1,16 @@
+theory Minimal_branch begin
+
+rule Start: [ Fr(x) ] --[ Start(x) ]-> [ A(x) ]
+
+rule Opt1:  [ A(x) ]  --[ Option1(x)  ]-> [ B(x) ]
+rule Opt2:  [ A(x) ]  --[ Option2(x)  ]-> [ C(x) ]
+rule Opt3:  [ A(x) ]  --[ Option3(x)  ]-> [ D(x) ]
+
+lemma Start_before_Loop [reuse, use_induction]:
+  "All x #j. Loop(x) @ j ==> (Ex #i. Start(x) @ i & i < j)"
+
+lemma Satisfied_by_empty_trace_only [use_induction]:
+  exists-trace
+  "All x #j. Loop(x) @ j ==> F"
+
+end

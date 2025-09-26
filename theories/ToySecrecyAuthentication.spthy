@@ -1,0 +1,30 @@
+theory ToySecrecyAuthentication begin
+
+builtins: symmetric-encryption
+
+rule GenerateSharedKey:
+  [Fr(~k)]
+--[]->
+  [!SharedKey(~k)]
+
+rule SendEncrypted:
+  [!SharedKey(~k), Fr(~n)]
+--[Sent(~n,~k)]->
+  [Out(senc(~n,~k))]
+
+rule ReceiveEncrypted:
+  [!SharedKey(~k), In(senc(~n,~k))]
+--[Received(~n,~k)]->
+  []
+
+lemma executable:
+  exists-trace
+  "Ex n k #i #j. Received(n,k)@i & Sent(n,k)@j"
+
+lemma secrecy:
+  "All n k #i. Sent(n,k)@i ==> not (Ex #j. K(n)@j)"
+
+lemma authentication:
+  "All n k #i. Received(n,k)@i ==> Ex #j. Sent(n,k)@j"
+
+end

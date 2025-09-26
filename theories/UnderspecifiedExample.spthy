@@ -1,0 +1,21 @@
+theory UnderspecifiedExample begin
+
+functions: h/1
+
+rule HashPublic_Explicit:
+  [ In($X) ]
+--[ A(h($X))]->
+  []
+
+rule HashPublic_Restriction:
+  [ In($X), In(Y) ]
+--[ B(Y), _restrict( Y = h($X) ) ]->
+  []
+
+lemma ExplicitOnlyHashes:
+  "All Y #i. A(Y)@i ==> Ex X. Y=h(X)"
+
+lemma RestrictionOnlyHashes:
+  "All Y #i. B(Y)@i ==> Ex X. Y=h(X)"
+
+end

@@ -1,0 +1,14 @@
+theory Minimal_Loop_Example begin
+
+rule Start: [ Fr(x) ] --[ Start(x) ]-> [ A(x) ]
+
+rule Loop:  [ A(x) ]  --[ Loop(x)  ]-> [ A(x) ]
+
+lemma Start_before_Loop [reuse, use_induction]:
+  "All x #j. Loop(x) @ j ==> (Ex #i. Start(x) @ i & i < j)"
+
+lemma Satisfied_by_empty_trace_only [use_induction]:
+  exists-trace
+  "All x #j. Loop(x) @ j ==> F"
+
+end

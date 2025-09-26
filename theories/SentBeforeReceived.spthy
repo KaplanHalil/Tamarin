@@ -1,0 +1,21 @@
+theory SentBeforeReceived begin
+
+rule Setup:
+  [Fr(~tid)]
+--[Create(~tid)]->
+  [State(~tid, 'ready')]
+
+rule Send:
+  [State(~tid, 'ready'), Fr(~n)]
+--[Sent(~n)]->
+  [State(~tid, ~n), Out(~n)]
+
+rule Receive:
+  [State(~tid, ~n), In(~n)]
+--[Received(~n)]->
+  [State(~tid, 'done')]
+
+lemma SentBeforeReceived:
+  "All x #i. Received(x)@#i ==> Ex #j. Sent(x)@#j & #j < #i"
+
+end

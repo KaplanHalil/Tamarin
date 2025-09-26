@@ -1,0 +1,9 @@
+theory EquationalTheoriesFVPblindsig begin
+
+functions: true/0, pk/1, sign/2, verify/3, blind/2, unblind/2
+equations:
+    verify(sign(m, k), m, pk(k)) = true,
+    unblind( blind(m,r),r ) = m,
+    unblind( sign(blind(m,r),k),r ) = sign(m,k)
+
+end

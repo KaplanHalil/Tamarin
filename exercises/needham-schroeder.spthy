@@ -1,0 +1,174 @@
+theory NSPK
+begin
+
+/*
+   Protocol:    The classic three message version of the
+                Needham-Schroeder Public Key Protocol
+ */
+
+// ==========================
+// Equational Theory
+// ==========================
+
+functions: pk/1, adec/2, aenc/2
+equations: adec(aenc(m,pk(k)),k)=m
+
+// ==========================
+// Public key infrastructure
+// ==========================
+
+// Register a new public key for agent $A
+rule Register_pk:
+  [ Fr(~ltkA) ]
+  --[ GenKey($A) ]->
+  [ !Ltk($A, ~ltkA), !Pk($A, pk(~ltkA)), Out(pk(~ltkA)) ]
+
+// Corruption: reveal the secret key of agent A
+rule Reveal_ltk:
+  [ !Ltk(A, ltkA) ] --[ Rev(A) ]-> [ Out(ltkA) ]
+
+
+/* We formalize the following protocol
+
+  protocol NSPK {
+    1. I -> R: {ni,I}pk(R)
+    2. I <- R: {ni,nr}pk(I)
+    3. I -> R: {nr}pk(R)
+  }
+*/
+
+// ==========================
+// Initiator Rules
+// ==========================
+
+// Setup
+rule I_Init:
+    [ Fr(~id)           // generate a session identifier
+    , !Pk($R, pkR)      // look up the responder's public key
+    , !Ltk($I, ~skI)    // look up your own secret key
+    ]
+  --[ Create_I($I, ~id) ]->
+    [ St_I_1($I, ~id, ~skI, $R, pkR) ] // store the first state fact
+
+// send first message: I -> R: {ni,I}pk(R)
+rule I_1:
+  let m1 = aenc{~ni, $I}pkR
+  in
+    [ Fr(~ni)                               // generate nonce ~ni
+    , St_I_1($I, ~id, ~skI, $R, pkR)        // look up previous state
+    ]
+  --[ Send($I, m1) ]->
+    [ Out(m1)                               // output message
+    , St_I_2($I, ~id, ~skI, $R, pkR, ~ni)   // store state
+    ]
+
+// receive answer:      2. I <- R: {ni,nr}pk(I)
+// & send last message: 3. I -> R: {nr}pk(R)
+rule I_2:
+  let m2 = aenc{~ni, nr}pk(~skI)
+      m3 = aenc{nr}pkR
+  in
+    [ St_I_2($I, ~id, ~skI, $R, pkR, ~ni) // look up previous state
+    , In(m2)                              // receive message
+    ]
+  --[ Receive($I, m2), Send($I, m3)
+    , Claim_Secret($I, $R, ~ni)
+    , End_I($I, $R, ~ni, nr) ]->
+    [ Out(m3) ]                          // output message
+
+// ==========================
+// Responder Rules
+// ==========================
+
+// Setup
+rule R_Init:
+    [ Fr(~id)           // generate a session identifier
+    , !Pk($I, pkI)      // look up the initiator's public key
+    , !Ltk($R, ~skR)    // look up your own secret key
+    ]
+  --[ Create_R($R, ~id) ]->
+    [ St_R_1($R, ~id, ~skR, $I, pkI) ] // store the first state fact
+
+// receive first message: I -> R: {ni,I}pk(R)
+// & send second message: I <- R: {ni,nr}pk(I)
+rule R_1:
+  let m1 = aenc{ni, $I}pk(~skR)
+      m2 = aenc{ni, ~nr}pkI
+  in
+    [ Fr(~nr)                          // generate nonce ~nr
+    , St_R_1($R, ~id, ~skR, $I, pkI)   // look up previous state
+    , In(m1)                           // receive message
+    ]
+  --[ Receive($R, m1), Send($R, m2) ]->
+    [ St_R_2($R, ~id, ~skR, $I, pkI, ni, ~nr) // store state
+    , Out(m2)                                 // output message
+    ]
+
+// receive last message: 3. I -> R: {nr}pk(R)
+rule R_2:
+  let m3 = aenc{~nr}pk(~skR)
+  in
+    [ St_R_2($R, ~id, ~skR, $I, pkI, ni, ~nr)  // look up previous state
+    , In(m3)                                   // receive message
+    ]
+  --[ Receive($R, m3)
+    , Claim_Secret($R, $I, ~nr)
+    , End_R($I, $R, ni, ~nr) ]->
+    [ ]
+
+// ==========================
+// Lemmas
+// ==========================
+
+// Nonce secrecy from the perspective of both the initiator and the responder.
+lemma nonce_secrecy:
+  "
+  // Uncomment the following to get a more readable attack
+  /*
+  (
+  // Only Three participants
+  (All A #i .
+      (   GenKey(A) @ i) ==>
+        (A = 'Alice' | A = 'Bob' | A = 'Charlie')
+      ) &
+  // Only one key per participant
+  (All A #i #j.
+      (   GenKey(A) @ i
+        & GenKey(A) @ j) ==>
+        #i = #j) &
+  // Do not talk to yourself!
+  (All A B ni nr #i.
+          End_R(A, B, ni, nr) @ i
+          ==> not (A = B)
+    ) &
+  (All A B ni nr #i.
+          End_I(A, B, ni, nr) @ i
+          ==> not (A = B)
+      )
+  ) ==>
+  */
+  /* It cannot be that */
+  All A B s #i.
+  (
+    /* If 'A' has exchanged a secret 's' with 'B' */
+    Claim_Secret(A, B, s) @ #i
+      /* and neither of the two communicating parties are compromised */
+   & not (Ex #j. Rev(A) @ #j) & not (Ex #j. Rev(B) @ #j)
+      /* the adversary cannot know the secret 's' */
+      ==> not (Ex #j. K(s) @ j)
+  ) "
+
+
+// Consistency check: ensure that an execution between honest agents is possible.
+lemma honest_execution_possible:
+  exists-trace
+  " /* It is possible that */
+    Ex A B na nb #i #j.
+      /* both I and R have finished */
+      End_I(A, B, na, nb) @ i
+    & End_R(A, B, na, nb) @ j
+      /* without the adversary having performed any long-term key reveal. */
+    & not (Ex X #k. Rev(X) @ k)
+  "
+
+end

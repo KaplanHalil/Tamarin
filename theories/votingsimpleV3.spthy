@@ -1,0 +1,38 @@
+theory votingSimpleNonDetAuthority
+begin
+
+/*
+ * Protocol:     Voting protocol, very simplistic, to demonstrate Observational Equivalence
+ * Modeler:      Jannik Dreier and Ralf Sasse
+ * Described in: Tamarin-Prover book
+ * Date:         June 2023
+ *
+ * Status: 	working
+// Observational equivalence is disproven automatically  (with --auto-sources, use A for all violations).
+ */
+
+functions: penc/3, pdec/2, pk/1
+
+equations: pdec(penc(m,pk(k),r), k) = m
+
+rule gen:
+  [ Fr(~k) ]
+--[ ]->
+  [ !Key(~k), Out(pk(~k)) ]
+
+rule voteDiff:
+  let vote = diff('A','B')
+  in
+  [ !Key(k), Fr(~r1) ]
+--[ ]->
+  [ Out(penc(vote, pk(k),~r1)) ]
+
+rule authority:
+  [ !Key(k),
+    In(<penc(X, pk(k), r1), penc(Y, pk(k),r2)>) ]
+--[]->
+  [ Out(<X,Y>) ]
+
+//STORY: use --auto-source, then use "A" to find all attacks -- we explain the attack that compares the output of the authority (with at least an 'A' from the voter) which can only happen on the left, as on the right we get 'B'
+
+end

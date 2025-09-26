@@ -1,0 +1,64 @@
+theory CombinedRestrictions begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, pair/2, snd/1
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+
+
+
+
+restriction Restr_MakeChoice_1:
+  "∀ x #NOW x.1.
+    (Restr_MakeChoice_1( x, x.1 ) @ #NOW) ⇒
+    ((x = 'string1') ∨ (x.1 = 'string2'))"
+  // safety formula
+
+rule (modulo E) MakeChoice:
+   [ In( $X ) ]
+  --[ Choice( $X ), Restr_MakeChoice_1( $X, $X ) ]->
+   [ Chosen( $X ) ]
+
+restriction Restr_AfterChoice_1:
+  "∀ #NOW.
+    (Restr_AfterChoice_1( ) @ #NOW) ⇒ (∃ #i. Choice( 'string2' ) @ #i)"
+
+rule (modulo E) AfterChoice:
+   [ Chosen( 'string1' ) ]
+  --[ AfterString1( ), Restr_AfterChoice_1( ) ]->
+   [ ]
+
+lemma AChoiceCanBeMade:
+  exists-trace "∃ x #i. Choice( x ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ x #i. (Choice( x ) @ #i)"
+*/
+by sorry
+
+lemma ChoiceInvariant:
+  all-traces
+  "∀ x #i. (Choice( x ) @ #i) ⇒ ((x = 'string1') ∨ (x = 'string2'))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ x #i. (Choice( x ) @ #i) ∧ (¬(x = 'string1')) ∧ (¬(x = 'string2'))"
+*/
+by sorry
+
+lemma CombinedRestrictions:
+  all-traces
+  "∀ #i.
+    (AfterString1( ) @ #i) ⇒
+    ((∃ #j. Choice( 'string1' ) @ #j) ∧ (∃ #j. Choice( 'string2' ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ #i.
+  (AfterString1( ) @ #i)
+ ∧
+  ((∀ #j. (Choice( 'string1' ) @ #j) ⇒ ⊥) ∨
+   (∀ #j. (Choice( 'string2' ) @ #j) ⇒ ⊥))"
+*/
+by sorry
+
+end

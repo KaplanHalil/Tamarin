@@ -1,0 +1,22 @@
+theory PatternMatchingVSExplicitDeconstructor begin
+
+functions: senc/2, sdec/2
+equations: sdec(senc(m,k),k)=m
+
+rule decrypt_pattern_matching:
+  [ !Key(k), In(senc(m,k)) ]
+--[Received(m)]->
+  []
+
+rule decrypt_explicit_deconstructor:
+  [ !Key(k), In(msg) ]
+--[ Received(sdec(msg,k)) ]->
+  []
+
+rule decrypt_explicit_destructor_success:
+  [ !Key(k), In(msg) ]
+--[ Eq(fst(sdec(msg,k)),'1')
+  , Received(snd(sdec(msg,k))) ]->
+  []
+
+end

@@ -1,0 +1,69 @@
+theory SignedDH_PFS begin
+
+builtins: diffie-hellman, signing
+
+// Public key infrastructure
+rule Register_pk:
+  [ Fr(~ltk) ]
+    -->
+  [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)), Out(pk(~ltk)) ]
+
+// Long-term key reveal
+rule Reveal_ltk:
+    [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+    [ Out(ltk) ]
+    
+// Protocol
+rule Init_1:
+  [ Fr(~tid), Fr(~ekI), !Ltk($I, ltkI) ]
+  -->
+  [ Init_1( ~tid, $I, $R, ~ekI )
+  , Out( <$I, $R, 'g' ^ ~ekI, sign(<'1', $I, $R,'g' ^ ~ekI>,ltkI) > ) ]
+
+rule Init_2:
+  [ Init_1( ~tid, $I, $R, ~ekI )
+  , !Pk($R, pkR)
+  , In( <$R, $I, Y, Z > )
+  ]
+--[ _restrict( verify(Z, <'2', $R, $I, Y >, pkR) = true )
+  , SessionKey($I,$R, Y ^ ~ekI) ]->
+  []
+
+rule Resp:
+  [ !Pk($I, pkI)
+  , !Ltk($R, ltkR)
+  , Fr(~ekR)
+  , In( <$I, $R, X, Z > )
+  ]
+--[ _restrict( verify(Z, <'1', $I, $R, X >, pkI) = true )
+  , SessionKey($I,$R, X ^ ~ekR) ]->
+  [ Out( <$R, $I, 'g' ^ ~ekR, sign(<'2', $R, $I, 'g' ^ ~ekR >, ltkR)> ) ]
+
+// Lemma fails due to reveal of different parties being possible
+// This would hold against an adversary without any reveal capabilities,
+// essentially one that is not a possible participant, as modeled in
+// SignedDH_simple.spthy
+lemma Secrecy:
+  "All I R sessKey #i.
+    SessionKey(I,R,sessKey)@i
+    ==> not (Ex #j. K(sessKey)@j) "
+
+// Lemma holds, as neither of the participants can be revealed
+lemma Secrecy_nopartners_revealed:
+  "All I R sessKey #i.
+    SessionKey(I,R,sessKey)@i
+    & not (Ex #k. LtkReveal(I) @k)
+    & not (Ex #k. LtkReveal(R) @k)
+    ==> not (Ex #j. K(sessKey)@j) "
+
+// Stronger lemma also holds, where neither of the parties can be
+// revealed before this session ends, but both can be revealed later 
+lemma Secrecy_Forward:
+  "All I R sessKey #i.
+    SessionKey(I,R,sessKey)@i
+    & not (Ex #k. LtkReveal(I) @k & #k < #i)
+    & not (Ex #k. LtkReveal(R) @k & #k < #i)
+    ==> not (Ex #j. K(sessKey)@j) "
+
+end

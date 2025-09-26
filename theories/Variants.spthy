@@ -1,0 +1,16 @@
+theory Variants begin
+
+functions: senc/2, sdec/2
+equations: sdec(senc(m,k),k)=m
+
+rule genKey:
+  [ Fr(k) ]
+--[  ]->
+  [ !Key(k) ]
+
+rule decrypt:
+  [ !Key(k), In(msg) ]
+--[  ]->
+  [ Out(sdec(msg,k)) ]
+
+end

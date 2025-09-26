@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+
+import re
+import os
+import sys
+debug = True
+
+lines = sys.stdin.readlines()
+lemma = sys.argv[1]
+
+# INPUT:
+# - lines contain a list of "%i:goal" where "%i" is the index of the goal
+# - lemma contain the name of the lemma under scrutiny
+# OUTPUT:
+# - (on stdout) a list of ordered index separated by EOL
+
+rank = []      # list of list of goals, main list is ordered by priority
+maxPrio = 110
+for i in range(0,maxPrio):
+  rank.append([])
+
+if lemma == "uniqueness":
+  for line in lines:
+    num = line.split(':')[0]
+    if re.match('.*ReceiverKeySimple.*', line):
+      rank[90].append(num)
+    elif re.match('.*senc\(xsimple.*', line) or \
+           re.match('.*senc\(~xsimple.*', line):
+      rank[80].append(num)
+    elif re.match('.*KU\( ~key.*', line):
+      rank[50].append(num)
+# an optional catch-all rank can be used, but is not required
+#    else:
+#      rank[40].append(num)
+
+else:
+  exit(0)
+
+# Ordering all goals by ranking (higher first)
+for listGoals in reversed(rank):
+  for goal in listGoals:
+    sys.stderr.write(goal)
+    print(goal)

@@ -1,0 +1,45 @@
+theory SignedDH_simple begin
+
+builtins: diffie-hellman, signing
+
+restriction OnlyOnceV:
+  "All #i #j x. OnlyOnceV(x)@#i & OnlyOnceV(x)@#j ==> #i = #j"
+
+// Public key infrastructure
+rule Register_pk:
+  [ Fr(~ltk) ]
+    --[ OnlyOnceV(<'key',$A>) ]->
+  [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)), Out(pk(~ltk)) ]
+
+// Protocol
+rule Init_1:
+  [ Fr(~tid), Fr(~ekI), !Ltk($I, ltkI) ]
+  -->
+  [ Init_1( ~tid, $I, $R, ~ekI )
+  , Out( <$I, $R, 'g' ^ ~ekI, sign(<'1', $I, $R,'g' ^ ~ekI>,ltkI) > ) ]
+
+rule Init_2:
+  [ Init_1( ~tid, $I, $R, ~ekI )
+  , !Pk($R, pkR)
+  , In( <$R, $I, Y, Z >)
+  ]
+--[ _restrict( verify(Z, <'2', $R, $I, Y >, pkR) = true )
+  , SessionKey($I,$R, Y ^ ~ekI) ]->
+  []
+
+rule Resp:
+  [ !Pk($I, pkI)
+  , !Ltk($R, ltkR)
+  , Fr(~ekR)
+  , In( <$I, $R, X, Z > )
+  ]
+--[ _restrict( verify(Z, <'1', $I, $R, X >, pkI) = true )
+  , SessionKey($I,$R, X ^ ~ekR) ]->
+  [ Out( <$R, $I, 'g' ^ ~ekR, sign(<'2', $R, $I, 'g' ^ ~ekR >, ltkR)> ) ]
+
+lemma Secrecy:
+  "All I R sessKey #i.
+    SessionKey(I,R,sessKey)@i
+    ==> not (Ex #j. K(sessKey)@j) "
+
+end

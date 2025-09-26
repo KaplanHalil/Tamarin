@@ -1,0 +1,44 @@
+theory SourceOfUniqueness begin
+
+heuristic: {uniqueness}
+
+tactic: uniqueness
+presort: C
+prio:
+    isFactName "ReceiverKeySimple"
+prio:
+    regex "senc\(xsimple" | regex "senc\(~xsimple"
+prio: {smallest}
+    regex "KU\( ~key"
+
+builtins: symmetric-encryption
+
+rule generatecomplicated:
+ [ In(x), Fr(~key)  ]
+ --[ Complicated(x) ]->
+ [ Out(senc(x,~key)), ReceiverKeyComplicated(~key) ]
+
+rule generatesimple:
+ [ Fr(~xsimple), Fr(~key)  ]
+ --[ SimpleUnique(~xsimple) ]->
+ [ Out(senc(~xsimple,~key)), ReceiverKeySimple(~key) ]
+
+rule receive:
+ [ ReceiverKeyComplicated(keycomplicated)
+ , In(senc(xcomplicated,keycomplicated))
+ , ReceiverKeySimple(keysimple)
+ , In(senc(xsimple,keysimple))
+ ]
+ --[ Unique(<xcomplicated,xsimple>) ]->
+ [  ]
+ 
+// this restriction artificially complicates all occurrences of Complicated(x)
+restriction complicate:
+ "All x #i. Complicated(x)@i
+   ==> (Ex y #j. Complicated(y)@j & #j < #i) 
+     | (Ex y #j. SimpleUnique(y)@j & #j < #i)"
+ 
+lemma uniqueness:
+ "All #i #j x. Unique(x)@i & Unique(x)@j ==> #i=#j"
+
+end

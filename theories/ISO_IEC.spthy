@@ -1,0 +1,71 @@
+theory ISO_IEC
+begin
+builtins: symmetric-encryption
+
+rule Setup:     /* Setup shared keys between $X (variable) */
+  [Fr(~kXT)]    /* and 'T' (fixed trusted server)          */
+   --[]->
+  [!SharedKey($X,'T',~kXT)]
+
+rule A1:      /* A initiates protocol with T */ 
+  [Fr(~tvpA), Fr(~text1) ]
+    --[]->
+  [Out(<~tvpA,$B,~text1>),StA1($B,~tvpA)]
+
+rule T:     /* T receives message from A and responds to A */
+  let m1 = ~text4
+      m2 = senc(<tvpa,~sesK,B,~text3>,kat)
+      m3 = senc(<~tnT,~sesK,A,~text2>,kbt)
+      tokenTA = <m1,m2,m3>
+  in
+    [In(<tvpa,B,txt1>),
+    !SharedKey(A,T,kat),!SharedKey(B,T,kbt),
+    Fr(~text2),Fr(~text3),Fr(~text4),Fr(~sesK),Fr(~tnT)]
+     --[Sent(A,B,~sesK)]->
+    [Out(tokenTA)]
+
+rule A2:  /* A receives message from T and responds to B */
+   let t2 = senc(<tvpA,sesk,B,text3>,kat)
+       tokenTA  = <t1,t2,t3>
+       m1 = ~text6
+       m2 = t3
+       m3 = senc(<~tnA,B,~text5>,sesk)
+       tokenAB = <m1,m2,m3>
+   in    
+     [In(tokenTA),!SharedKey(A,T,kat),
+      StA1(B,tvpA),Fr(~text5),Fr(~text6),Fr(~tnA)]
+      --[ALearns(A,B,sesk)]->
+     [Out(tokenAB),StA2(A,B,~tnA,sesk)]
+
+rule B:  /* B receives message from A and responds to A */
+  let 
+      t2 = senc(<tnt,sesk,A,text2>,kbt)
+      t3 = senc(<tna,B,text5>,sesk)
+      tokenAB = <t1,t2,t3>
+      m1 = ~text8
+      m2 = senc(<~tnB,A,~text7>,sesk)
+      tokenBA = <m1,m2>
+  in
+     [In(tokenAB),!SharedKey(B,'T',kbt),
+      Fr(~text7),Fr(~text8),Fr(~tnB)]
+      --[BLearns(A,B,sesk)]->
+     [Out(tokenBA)]
+
+rule A3: /* A receives response from B */
+  let 
+     t2 = senc(<tnb,A,text7>,sesk)
+     tokenBA = <t1,t2>
+  in
+    [In(tokenBA),StA2(A,B,tna,sesk)]
+     --[Done(A,B,sesk)]->
+    []
+
+lemma secrecy:
+  "All a b k #i. Sent(a,b,k)@i ==> not (Ex #j. K(k)@j)"
+
+lemma AauthenticatesB:
+  "All a b k #i. Done(a,b,k)@i ==> Ex #j. BLearns(a,b,k)@j"
+
+lemma BauthenticatesA:
+  "All a b k #i. BLearns(a,b,k)@i ==> Ex #j. ALearns(a,b,k)@j"
+end

@@ -1,0 +1,38 @@
+theory ChannelRules begin
+
+rule authentic_channel_send:
+  [ AuthSend(A,B,m) ]
+--[ AuthChan_Out(A,B,m) ]->
+  [ !Auth(A,m), Out(m) ]
+
+rule authentic_channel_receive:
+  [ !Auth(A, m), In(B) ]
+--[ AuthChan_In(A,B,m) ]->
+  [ AuthRecv(A,B,m) ]
+
+rule confidential_channel_send:
+  [ ConfSend(A,B,m) ]
+--[ ConfChan_Out(A,B,m) ]->
+  [ !Conf(B,m) ]
+
+rule confidential_channel_receive:
+  [ !Conf(B, m), In(A) ]
+--[ ConfChan_In(A,B,m) ]->
+  [ ConfRecv(A,B,m) ]
+
+rule confidential_channel_send_adversary:
+  [ In(<A,B,m>) ]
+--[]->
+  [ ConfSend(A,B,m) ]
+
+rule secure_channel_send:
+  [ SecSend(A,B,m) ]
+--[ SecChan_Out(A,B,m) ]->
+  [ !Sec(A,B,m) ]
+
+rule secure_channel_receive:
+  [ !Sec(A,B,m) ]
+--[ SecChan_In(A,B,m) ]->
+  [ SecRecv(A,B,m) ]
+
+end

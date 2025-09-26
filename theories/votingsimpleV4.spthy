@@ -1,0 +1,64 @@
+theory votingSimpleNonDetAuthoritySwap
+begin
+
+/*
+ * Protocol:     Voting protocol, very simplistic, to demonstrate Observational Equivalence
+ * Modeler:      Jannik Dreier and Ralf Sasse
+ * Described in: Tamarin-Prover book
+ * Date:         June 2023
+ *
+ * Status: 	working
+// Observational equivalence is disproven automatically (with --auto-sources, use 'A' for all violations).
+ */
+
+functions: penc/3, pdec/2, pk/1, sign/2, verify/3, true/0
+
+equations: pdec(penc(m,pk(k),r), k) = m,
+                  verify(sign(m,k),m,pk(k)) = true
+
+rule gen:
+  [ Fr(~k) ]
+--[ ]->
+  [ !Key(~k), Out(pk(~k)) ]
+
+rule genVoterOther:
+  [Fr(~k)]
+--[]->
+  [!VoterKeyOther(~k), Out(pk(~k))]
+
+rule genVoterDiff:
+  [Fr(~k)]
+--[]->
+  [!VoterKeyDiff(~k), Out(pk(~k))]
+
+//note the opposite order here to voteDiff
+rule voteOther:
+ let votecand = diff('B','A')
+       vote = penc(votecand, pk(authorityk),~r1)
+  in
+  [ !Key(authorityk), Fr(~r1), !VoterKeyOther(~k) ]
+--[ ]->
+  [ Out(vote) ]
+
+//note the opposite order here to voteOther
+rule voteDiff:
+  let votecand = diff('A','B')
+       vote = penc(votecand, pk(authorityk),~r1)
+  in
+  [ !Key(authorityk), Fr(~r1), !VoterKeyDiff(~k) ]
+--[ ]->
+  [ Out(vote) ]
+
+rule authority:
+  let voteA = penc(X, pk(k), r1)
+      voteB = penc(Y, pk(k), r2)
+  in
+  [ !Key(k),
+    In(< voteA , voteB  >) ]
+--[]->
+  [ Out(<X,Y>) ]
+  
+// added another voter that votes opposite (B,A compared to A,B), and added separate identifying keys for both voters in this iteration, then use 'A' for all violations
+// STORY: automatically finds an attack here: the problem is that the attacker can send the output of one of the two voters to the authority, and will thus receive the tally A,A respectively B,B depending on which voter on which side is given, making it distinguishable, however this is a false attack, that in practice should not happen, as only one vote per voter should be accepted in the tally. Add signatures from the voters to stop duplicates. (Adding signatures also stops the attacker from creating the second vote that is received by authority, which attacker would know.)
+
+end

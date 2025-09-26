@@ -1,0 +1,26 @@
+theory CombinedRestrictions begin
+
+rule MakeChoice:
+  [In($X)]
+--[Choice($X), _restrict(($X='string1') | ($X='string2'))]->
+  [Chosen($X)]
+
+rule AfterChoice:
+  [Chosen('string1')]
+--[ AfterString1(), _restrict(Ex #i. Choice('string2')@i) ]->
+  []
+
+lemma AChoiceCanBeMade:
+  exists-trace
+  "Ex x #i. Choice(x)@i"
+
+lemma ChoiceInvariant:
+  "All x #i. Choice(x)@i ==> (x='string1')|(x='string2')"
+
+lemma CombinedRestrictions:
+  "All #i. AfterString1()@i ==> (
+     (Ex #j. Choice('string1')@j ) 
+     &
+     (Ex #j. Choice('string2')@j ) 
+   )"
+end

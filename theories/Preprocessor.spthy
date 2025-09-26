@@ -1,0 +1,17 @@
+theory Preprocessor begin
+
+#define KEYWORD1
+
+#ifdef (KEYWORD1 | KEYWORD2) & KEYWORD3
+
+...
+
+#else
+
+...
+
+#endif
+
+#include "path/to/file.spthy"
+
+end

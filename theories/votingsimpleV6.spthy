@@ -1,0 +1,68 @@
+theory votingSimpleNonDetAuthoritySwapSigCheckOutputMultiset 
+begin
+
+/*
+ * Protocol:     Voting protocol, very simplistic, to demonstrate Observational Equivalence
+ * Modeler:      Jannik Dreier and Ralf Sasse
+ * Described in: Tamarin-Prover book
+ * Date:         June 2023
+ *
+ * Status: 	working
+// Observational equivalence is proven automatically in less than 10 seconds.
+ */
+
+builtins: multiset
+
+functions: penc/3, pdec/2, pk/1, sign/2, verify/3, true/0
+
+equations: pdec(penc(m,pk(k),r), k) = m,
+                  verify(sign(m,k),m,pk(k)) = true
+
+rule gen:
+  [ Fr(~k) ]
+--[ ]->
+  [ !Key(~k), Out(pk(~k)) ]
+
+rule genVoterOther:
+  [Fr(~k)]
+--[]->
+  [!VoterKeyOther(~k), Out(pk(~k))]
+
+rule genVoterDiff:
+  [Fr(~k)]
+--[]->
+  [!VoterKeyDiff(~k), Out(pk(~k))]
+
+rule voteOther:
+  let votecand = diff('B','A')
+       vote = penc(votecand, pk(authorityk),~r1)
+       votesigned = <vote, sign(vote,~k)>
+  in
+  [ !Key(authorityk), Fr(~r1), !VoterKeyOther(~k) ]
+--[ ]->
+  [ Out(vote) ]
+
+rule voteDiff:
+  let votecand = diff('A','B')
+       vote = penc(votecand, pk(authorityk),~r1)
+       votesigned = <vote, sign(vote,~k)>
+  in
+  [ !Key(authorityk), Fr(~r1), !VoterKeyDiff(~k) ]
+--[ ]->
+  [ Out(votesigned) ]
+
+rule authority:
+  let voteA = penc(X, pk(k), r1)
+      voteAsigned= <voteA, sign(voteA,kA)>
+      voteB = penc(Y, pk(k), r2)
+      voteBsigned= <voteB, sign(voteB,kB)>
+  in
+  [ !VoterKeyOther(kA), !VoterKeyDiff(kB), !Key(k),
+    In(< voteAsigned , voteBsigned  >) ]
+--[ ]->
+  [ Out(X+Y) ]
+  
+// STORY: with the output as multiset, now this is proven automatically as the order cannot be observed anymore.
+// This requires a tallying authority to ensure that votes are rerandomized, or aggregated, in a way that is not observable on the outside, which is pretty realistic.
+
+end

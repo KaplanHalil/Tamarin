@@ -1,0 +1,19 @@
+theory Guardedness begin
+
+// Dummy rule
+rule Dummy:
+    [ Fr(x) ]
+  --[ Finished(x), Start(x) ]->
+    [ Out(x) ]
+
+// Lemmas
+lemma Guarded:
+  "All x #i. Finished(x)@#i ==> Ex #j. Start(x)@#j"
+
+lemma NotGuardedUnusedVariable:
+  "All x y #i. Finished(x)@#i ==> Ex #j. Start(x)@#j"
+
+lemma NotGuardedQuantifiedInWrongPlace:
+  "All x #i #j. Finished(x)@#i ==> Start(x)@#j"
+
+end

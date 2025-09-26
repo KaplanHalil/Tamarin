@@ -1,0 +1,54 @@
+theory sourcesLemma
+begin
+
+/*
+We formalize the following challenge-response protocol
+    1. I -> R: {'req',I, n}pk(R)
+    2. I <- R: {'resp',n}pk(I)
+*/
+
+builtins: asymmetric-encryption
+
+// Public key infrastructure
+rule Register_pk:
+  [ Fr(~ltkA) ]
+  -->
+  [ !Ltk($A, ~ltkA), !Pk($A, pk(~ltkA)), Out(pk(~ltkA)) ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, ltkA) ] --[ RevLtk(A)    ]-> [ Out(ltkA) ]
+
+// Initiator
+rule Rule_I_1:
+  let m1 = aenc{'req', $I, ~n}pkR
+  in
+    [ Fr(~n), !Pk(R, pkR), !Ltk($I, ltkI) ]
+  --[ SecretI($I,R,~n) ]->
+    [ Out(m1), State_I($I, R, ~n, pkR, ltkI) ]
+
+rule Rule_I_2:
+  let m2 = aenc{'resp', ~n}pk(ltkI)
+  in
+    [ State_I($I, R, ~n, pkR, ltkI), In(m2) ]
+  --[ ]->
+    [ ]
+
+// Responder
+rule Rule_R:
+  let m1 = aenc{'req', I, x}pk(ltkR)
+      m2 = aenc{'resp', x}pkI
+  in
+    [ !Ltk(R, ltkR), In(m1), !Pk(I, pkI)]
+  --[ ]->
+    [ Out(m2) ]
+
+
+// A simple lemma to prove, which fails without sources lemma
+lemma nonce_secrecy:
+  " not(
+      Ex A B s #i. SecretI(A, B, s) @ i  & (Ex #j. K(s) @ j)
+        & not (Ex #r. RevLtk(A) @ r)
+        & not (Ex #r. RevLtk(B) @ r)
+    )"
+
+end

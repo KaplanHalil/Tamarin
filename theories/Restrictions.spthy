@@ -1,0 +1,46 @@
+theory Restrictions begin
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @#i ==> x = y"
+
+restriction Inequality:
+  "All x #i. Neq(x,x) @ #i ==> F"
+
+restriction OnlyOnce:
+  "All #i #j. OnlyOnce()@#i & OnlyOnce()@#j ==> #i = #j"
+restriction OnlyOnceV:
+  "All #i #j x. OnlyOnceV(x)@#i & OnlyOnceV(x)@#j ==> #i = #j"
+
+builtins: multiset
+restriction SubMultiset:
+  "All x y #i. SubMultiset(x,y)@#i ==> Ex z. x + z = y"
+restriction SuperMultiset:
+  "All x y #i. SuperMultiset(x,y)@#i ==> Ex z. x = y + z"
+
+rule FakeRuleToAvoidWarnings:
+  []
+--[Eq($A,$B), Neq($C,$D), OnlyOnce(), OnlyOnceV('1'), SubMultiset('1', '1'+'1'), SuperMultiset('1', '1'+'1'), VerifySignature('1','2','3')   ]->
+  []
+
+builtins: signing
+
+// Dummy rule for protocol without proper PKI or ever sending signature
+rule R_Init:  
+  [ Fr(~tid)
+  ]
+-->
+  [ S_R_1(~tid, $I, $R, ~tid, pk(~tid) )
+  ]
+
+rule R_Recv_Verify_Signature:
+  [ In(m)
+  , S_R_1(~tid, $I, $R, ~nonce, pkI ) 
+  ]
+--[ Eq( verify(m, <$R,~nonce>, pkI ), true)
+  ]->
+  [ S_R_2(~tid, $I, $R, ~nonce, pkI )
+  ]
+  
+
+
+end

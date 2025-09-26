@@ -1,0 +1,42 @@
+theory NaturalsExample
+begin
+
+section{* Example protocol for naturals *}
+
+/*
+ * Protocol:    Example protocol
+ * Modeler:     Cas Cremers
+ * Date:        January 2024
+ *
+ * Status:      development
+ */
+
+builtins: natural-numbers
+
+rule init:
+    [ Fr(~tid) ]
+    --[ A(~tid, %1) ]->
+    [ S(~tid, %1) ]
+
+rule step:
+    [ S(~tid, %n) ]
+    --[ A(~tid, %n %+ %1) ]->
+    [ S(~tid, %n %+ %1) ]
+
+lemma increasing:
+  "All tid n1 n2 #i1 #i2.
+    A(tid,n1)@i1 & A(tid,n2)@i2 & #i1 < #i2 
+      ==> n1 << n2"
+
+/* The following lemma is expected to yield a counterexample */
+lemma decreasing:
+    "All tid n1 n2 #i1 #i2.
+        A(tid,n1)@i1 & A(tid,n2)@i2 & #i1 < #i2 
+          ==> n2 << n1"
+    
+lemma no_duplicates:
+    "All tid n1 n2 #i1 #i2.
+        A(tid,n1)@i1 & A(tid,n2)@i2 & not(#i1 = #i2) 
+          ==> not(n1 = n2)"
+
+end

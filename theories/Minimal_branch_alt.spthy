@@ -1,0 +1,9 @@
+theory Minimal_branch begin
+
+rule Start: [ Fr(x), In($T) ] --[ Start(x) ]-> [ A(x,$T) ]
+
+rule Opt1:  [ A(x,'1') ]           --[ Option1(x) ]->  [ B(x) ]
+rule Opt2:  [ A(x,'2') ]           --[ Option2(x) ]->  [ C(x) ]
+rule Opt3:  [ A(x,'3'), In(h(x)) ] --[ Option3(x) ]->  [ D(x) ]
+
+end

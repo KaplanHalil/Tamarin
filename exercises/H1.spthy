@@ -1,0 +1,162 @@
+theory H1
+begin
+
+builtins: signing
+
+// pre-shared key distribution
+rule Register_pk:
+  [ Fr(~ltkX) ]
+  --[ Register($X) ]->
+  [ !Ltk($X, ~ltkX), Out(pk(~ltkX))]
+
+rule Reveal_ltk:
+  [ !Ltk(X, ltkX) ] --[ Reveal(X) ]-> [ Out(ltkX) ]
+
+/* We formalize the following protocol
+  protocol {
+    1. I -> R: {I,R}sk(I)  /// add an Ni that will not be used, maybe add Nr to the response
+    2. I <- R: {I,R}sk(R)
+  }
+*/
+
+rule Init_I:
+  [ Fr(~id)
+  , !Ltk(I, ltkI), !Ltk(R, ltkR)
+  ]
+--[ Create_I(I, ~id) , NotEq(I,R) ]->
+  [ St_I_1(I, ~id, ltkI, pk(ltkR), R)
+  ]
+
+rule Init_R:
+  [ Fr(~id)
+  , !Ltk(R, ltkR), !Ltk(I, ltkI)
+  ]
+--[ Create_R(R, ~id) , NotEq(I,R) ]->
+  [ St_R_1(R, ~id, ltkR, pk(ltkI), I)
+  ]
+
+rule I_1_send:
+  let mI1 = sign{I,R}ltkI
+  in
+  [ St_I_1(I, ~id, ltkI, pkltkR, R)
+  ]
+--[ Send(I, mI1)
+  , Running(I, R, 'anyroles')  // relevant for weak agreement only, as the roles are not taken into account
+  ]->
+  [ St_I_2(I, ~id, ltkI, pkltkR, R)
+  , Out(mI1)
+  ]
+
+rule R_1_receive [no_derivcheck]:
+  let mR1 = sign{I,R}ltkI
+  in
+  [ St_R_1(R, ~id, ltkR, pk(ltkI), I)
+  , In(mR1)
+  ]
+--[ Recv(R, mR1)
+  ]->
+  [ St_R_2(R, ~id, ltkR, pk(ltkI), I)
+  ]
+
+rule R_2_send:
+  let mR2 = sign{I,R}ltkR
+  in
+  [ St_R_2(R, ~id, ltkR, pkltkI, I)
+  ]
+--[ Send(R, mR2)
+  , Running(R, I, <'Init', 'Resp'>)
+  ]->
+  [ St_R_3(R, ~id, ltkR, pkltkI, I)
+  , Out(mR2)
+  ]
+
+rule I_2_receive [no_derivcheck]:
+  let mI2 = sign{I,R}ltkR
+  in
+  [ St_I_2(I, ~id, ltkI, pk(ltkR), R)
+  , In(mI2)
+  ]
+--[ Receive(I, mI2)
+  , Commit(I, R, <'Init', 'Resp'>)
+  , Finish(I, R)
+  ]->
+  [ St_I_3(I, ~id, ltkI, pk(ltkR), R)
+  ]
+
+
+// Executability
+// To obtain the intended MSC, we need to explicitly add some constraints:
+// - initiator is not talking to self
+// - there is only one initiator thread
+// Shows the intended MSC.
+lemma executable:
+  exists-trace
+    "Ex actor peer #i. 
+	Finish(actor, peer)@i & not (actor = peer) & 
+	not (Ex id1 id2 #j #k. Create_I(actor, id1)@j & Create_I(actor, id2)@k & not (#j = #k)) & 
+	not (Ex X #j. Reveal(X)@j)
+    "
+
+
+// Injective agreement from the perspective of the initiator.
+// fails
+lemma injective_agree:
+  " /* Whenever somebody commits to running a session */
+    All actor peer params #i.
+        Commit(actor, peer, params) @ i
+      /* and the adversary does not perform a long-term key reveal on assumed honest participant, then */
+      & not (Ex #r. Reveal(actor)@r)
+      & not (Ex #r. Reveal(peer)@r)
+      ==>
+        /* there is somebody running a session with the same parameters */
+          Ex #j. Running(peer, actor, params) @ j & j < i
+            /* and there is no other commit on the same parameters */
+            & not(Ex actor2 peer2 #i2.
+                    Commit(actor2, peer2, params) @ i2 & not(#i = #i2)
+                 )
+  "
+
+
+// Non-Injective agreement from the perspective of the initiator.
+// fails
+lemma noninjective_agree:
+  " /* Whenever somebody commits to running a session */
+    All actor peer params #i.
+        Commit(actor, peer, params) @ i
+      /* and the adversary does not perform a long-term key reveal on assumed honest participant, then */
+      & not (Ex #r. Reveal(actor)@r)
+      & not (Ex #r. Reveal(peer)@r)
+      ==>
+        /* there is somebody running a session with the same parameters */
+          Ex #j. Running(peer, actor, params) @ j
+  "
+
+
+// Weak agreement
+//
+// Note: This property does not constrain the roles played by the actor and the peer.
+// We therefore have to add a running claim also into the initiator role (see rule I_1_send above).
+// Instead of adding additional Commit/Running claims with empty third arguments, we allow the third
+// arguments to be unrelated (see t1 and t2 below).
+//
+// Holds. For the weak agreement property the fact that actor talks to itself willingly cannot
+// be a violation, as there is no constraint on which role each run of actor has to play.
+lemma weakagree:
+   "/* Whenever sombody commits to running a session, then*/
+    All actor peer t1 #i. 
+	Commit(actor, peer, t1) @ i
+      /* and the adversary does not perform a long-term key reveal on assumed honest participant, then */
+      & not (Ex #r. Reveal(actor)@r)
+      & not (Ex #r. Reveal(peer)@r)
+     ==> 
+        /* there is somebody running a session with matching participants */
+	  (Ex t2 #j. Running(peer, actor, t2) @j)"
+
+
+restriction onekeypername:
+  "All X #i #j. Register(X)@i & Register(X)@j ==> #i = #j"
+
+//restriction noselfcommunication:
+//  " All X Y #i. NotEq(X,Y) @i ==> not (X = Y)"
+
+end

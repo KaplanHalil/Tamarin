@@ -1,0 +1,49 @@
+theory Variants begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1[destructor], pair/2, sdec/2, senc/2,
+           snd/1[destructor]
+equations:
+    fst(<x.1, x.2>) = x.1,
+    sdec(senc(m, k), k) = m,
+    snd(<x.1, x.2>) = x.2
+
+
+
+rule (modulo E) genKey:
+   [ Fr( k ) ] --> [ !Key( k ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) decrypt:
+   [ !Key( k ), In( msg ) ] --> [ Out( sdec(msg, k) ) ]
+
+  /*
+  rule (modulo AC) decrypt:
+     [ !Key( k ), In( msg ) ] --> [ Out( z ) ]
+    variants (modulo AC)
+    1. k     = k.4
+       msg   = msg.4
+       z     = sdec(msg.4, k.4)
+    
+    2. k     = x.4
+       msg   = senc(x.5, x.4)
+       z     = x.5
+  */
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.7.1
+Maude version 2.7.1
+Git revision: cd9b3a518ee8c2e6c7c5875e2e0fc09f072581c2, branch: develop
+Compiled at: 2022-09-06 13:14:11.045656116 UTC
+*/
+
+end

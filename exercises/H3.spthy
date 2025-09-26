@@ -1,0 +1,153 @@
+theory H3
+begin
+
+builtins: signing
+
+// pre-shared key distribution
+rule Register_pk:
+  [ Fr(~ltkX) ]
+  --[ Register($X) ]->
+  [ !Ltk($X, ~ltkX), Out(pk(~ltkX))] 
+
+rule Reveal_ltk:
+  [ !Ltk(X, ltkX) ] --[ Reveal(X) ]-> [ Out(ltkX) ]
+
+/* We formalize the following protocol
+  protocol {
+    1. I -> R: Ni, {I,R}sk(I)
+    1. I <- R: {I, Ni}sk(R)
+  }
+*/
+
+rule Init_I:
+  [ Fr(~id)
+  , !Ltk(I, ltkI), !Ltk(R, ltkR)
+  ]
+--[ Create_I(I, ~id) ]->
+  [ St_I_1(I, ~id, ltkI, pk(ltkR), R)
+  ]
+
+rule Init_R:
+  [ Fr(~id)
+  , !Ltk(R, ltkR), !Ltk(I, ltkI)
+  ]
+--[ Create_R(R, ~id) ]->
+  [ St_R_1(R, ~id, ltkR, pk(ltkI), I)
+  ]
+
+rule I_1_send:
+  let mI1 = <~ni, sign{I,R}ltkI>
+  in
+  [ St_I_1(I, ~id, ltkI, pkltkR, R)
+  , Fr(~ni) 
+  ]
+--[ Send(I, mI1) 
+  , Running(I, R, 'anyroles')  // relevant for weak agreement only, as the roles are not taken into account
+  ]->
+  [ St_I_2(I, ~id, ltkI, pkltkR, R, ~ni) 
+  , Out(mI1)
+  ]
+
+rule R_1_receive [no_derivcheck]:
+  let mR1 = <ni, sign{I,R}ltkI>
+  in
+  [ St_R_1(R, ~id, ltkR, pk(ltkI), I)
+  , In(mR1)
+  ]
+--[ Recv(R, mR1) 
+  ]->
+  [ St_R_2(R, ~id, ltkR, pk(ltkI), I, ni)
+  ]
+
+rule R_2_send:
+  let mR2 = sign{I,ni}ltkR
+  in
+  [ St_R_2(R, ~id, ltkR, pkltkI, I, ni)
+  ] 
+--[ Send(R, mR2)
+  , Running(R, I, <'Init', 'Resp', ni>)
+  ]->
+  [ St_R_3(R, ~id, ltkR, pkltkI, I, ni)
+  , Out(mR2)
+  ]
+
+rule I_2_receive [no_derivcheck]:
+  let mI2 = sign{I,ni}ltkR
+  in
+  [ St_I_2(I, ~id, ltkI, pk(ltkR), R, ni) 
+  , In(mI2)
+  ]
+--[ Receive(I, mI2)
+  , Commit(I, R, <'Init', 'Resp', ni>)
+  , Finish()
+  ]->
+  [ St_I_3(I, ~id, ltkI, pk(ltkR), R, ni) 
+  ]
+
+
+// Executability
+// To obtain the intended MSC, we need to explicitly add a constraint:
+// - there is only one initiator thread
+// Shows the intended MSC.
+lemma executable:
+  exists-trace
+    "Ex #i. 
+	Finish() @i & 
+	not (Ex I1 I2 id1 id2 #j #k. Create_I(I1, id1)@j & Create_I(I2, id2)@k & not (#j = #k)) & 
+	not (Ex A #j. Reveal(A)@j)
+    "
+
+
+// Injective agreement from the perspective of  the initiator.
+// holds
+lemma injective_agree:
+  " /* Whenever somebody commits to running a session */
+    All actor peer params #i.
+        Commit(actor, peer, params) @ i
+      /* and the adversary does not perform a long-term key reveal on assumed honest participant, then */
+      & not (Ex #r. Reveal(actor)@r)
+      & not (Ex #r. Reveal(peer)@r)
+      ==>
+        /* there is somebody running a session with the same parameters */
+          Ex #j. Running(peer, actor, params) @ j & j < i
+            /* and there is no other commit on the same parameters */
+            & not(Ex actor2 peer2 #i2.
+                    Commit(actor2, peer2, params) @ i2 & not(#i = #i2)
+                 )
+  "
+
+// Non-Injective agreement from the perspective of the initiator.
+// holds
+lemma noninjective_agree:
+  " /* Whenever somebody commits to running a session */
+    All actor peer params #i.
+        Commit(actor, peer, params) @ i
+      /* and the adversary does not perform a long-term key reveal on assumed honest participant, then */
+      & not (Ex #r. Reveal(actor)@r)
+      & not (Ex #r. Reveal(peer)@r)
+      ==>
+        /* there is somebody running a session with the same parameters */
+          Ex #j. Running(peer, actor, params) @ j
+  "
+
+// Weak agreement 
+//
+// Note: This property does not constrain the roles played by the actor and the peer.
+// We therefore have to add a running claim also into the initiator role (see rule I_1_send above).
+// Instead of adding additional Commit/Running claims with empty third arguments, we allow the third 
+// arguments to be unrelated (see t1 and t2 below). 
+//
+// Holds. 
+lemma weakagree:
+   "/* Whenever sombody commits to running a session, then*/
+    All actor peer t1 #i. 
+	Commit(actor, peer, t1) @ i
+      /* and the adversary does not perform a long-term key reveal on assumed honest participant, then */
+      & not (Ex #r. Reveal(actor)@r)
+      & not (Ex #r. Reveal(peer)@r)
+     ==> 
+        /* there is somebody running a session with matching participants */
+	  (Ex t2 #j. Running(peer, actor, t2) @j)"
+
+
+end
