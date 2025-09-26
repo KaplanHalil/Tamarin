@@ -1,0 +1,44 @@
+theory toy0
+/*
+A                   B
+ 
+
+
+
+
+*/
+begin
+
+builtins: symmetric-encryption , hashing
+
+rule shared_key:
+
+[Fr(~psk)]
+-->
+[!SharedKey(~psk)]
+
+rule A0:
+
+    let
+        sifreli_RNa= senc(~RNa,~psk)
+    in
+
+[!SharedKey(~psk),Fr(~RNa)]
+-->
+[StateA(~psk,~RNa), Out(sifreli_RNa)]
+
+rule B0:
+
+    let
+        sifreli_RNB= senc(~RNb,~psk)
+        RNA=sdec(sifreli_RNA,~psk)
+        ss_b=h(<RNA,~RNb>)
+        sifreliSS_b = senc(ss_b,~psk)
+    in
+
+[!SharedKey(~psk),Fr(~RNb), In(sifreli_RNA)]
+-->
+[StateB(~psk,~RNb,ss_b), Out(<sifreli_RNB, sifreliSS_b>)]
+
+end
+
