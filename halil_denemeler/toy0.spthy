@@ -44,34 +44,27 @@ rule A1:
 
     let
         RNB = sdec(sifreli_RNB,~psk)
-        ss_b= sdec(sifreliSS_b)
+        ss_b= sdec(sifreliSS_b,~psk)
         ss_a=h(<~RNa,RNB>)
         sifreliSS_a = senc(ss_a,~psk)
     in
 
-[In(<sifreli_RNB, sifreliSS_b>),StateA(~psk,~RNa)]
---[_restrict(ss_a = ss_b), AconstructSS(~RNa,RNB,ss_a)]->
+[In(<sifreli_RNB, sifreliSS_b>),!StateA(~psk,~RNa)]
+--[_restrict(ss_a = ss_b), AconstructSS(~RNa,RNB,ss_a,ss_b)]->
 [Out(sifreliSS_a)]
 
 rule B1:
 
     let
-    ss_a= sdec(sifreliSS_a)
+    ss_a= sdec(sifreliSS_a,~psk)
     in
 [!StateB(~psk,RNA,~RNb,ss_b),In(sifreliSS_a)]
---[_restrict(ss_b = ss_a), BconstructSS(RNA,~RNb,ss_b)]->
+--[_restrict(ss_b = ss_a), BconstructSS(RNA,~RNb,ss_a,ss_b)]->
 []
 
 
-lemma:
-"
-
-
-
-"
-
-
-
+lemma authentication:
+  "All RNa RNb ss_a ss_b #i. AconstructSS(RNa,RNb,ss_a,ss_b) @i ==> Ex #j. BconstructSS(RNa,RNb,ss_a,ss_b) @j"
 
 
 end
