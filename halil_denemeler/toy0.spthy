@@ -25,7 +25,7 @@ rule A0:
 
 [!SharedKey(~psk),Fr(~RNa)]
 -->
-[StateA(~psk,~RNa), Out(sifreli_RNa)]
+[!StateA(~psk,~RNa), Out(sifreli_RNa)]
 
 rule B0:
 
@@ -38,7 +38,7 @@ rule B0:
 
 [!SharedKey(~psk),Fr(~RNb), In(sifreli_RNA)]
 -->
-[StateB(~psk,~RNb,ss_b), Out(<sifreli_RNB, sifreliSS_b>)]
+[!StateB(~psk,RNA,~RNb,ss_b), Out(<sifreli_RNB, sifreliSS_b>)]
 
 rule A1:
 
@@ -50,7 +50,29 @@ rule A1:
     in
 
 [In(<sifreli_RNB, sifreliSS_b>),StateA(~psk,~RNa)]
---[_restict()]->
+--[_restrict(ss_a = ss_b), AconstructSS(~RNa,RNB,ss_a)]->
+[Out(sifreliSS_a)]
+
+rule B1:
+
+    let
+    ss_a= sdec(sifreliSS_a)
+    in
+[!StateB(~psk,RNA,~RNb,ss_b),In(sifreliSS_a)]
+--[_restrict(ss_b = ss_a), BconstructSS(RNA,~RNb,ss_b)]->
 []
+
+
+lemma:
+"
+
+
+
+"
+
+
+
+
+
 end
 
