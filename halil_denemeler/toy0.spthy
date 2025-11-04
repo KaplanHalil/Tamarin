@@ -1,70 +1,45 @@
 theory toy0
-/*
-A                   B
- 
 
-
-
-
-*/
 begin
 
-builtins: symmetric-encryption , hashing
+builtins: symmetric-encryption 
 
-rule shared_key:
+functions: genpriv/1 [private]
 
-[Fr(~psk)]
+rule revpsk:
+
+    let
+        psk = genpriv('psk')
+    in
+[]
 -->
-[!SharedKey(~psk)]
+[Out(psk)]
+
 
 rule A0:
 
     let
-        sifreli_RNa= senc(~RNa,~psk)
+        psk = genpriv('psk')
+        sifreliGiz = senc(~giz, psk)
     in
 
-[!SharedKey(~psk),Fr(~RNa)]
+[Fr(~giz)]
 -->
-[!StateA(~psk,~RNa), Out(sifreli_RNa)]
+[Out(sifreliGiz)]
 
 rule B0:
 
-    let
-        sifreli_RNB= senc(~RNb,~psk)
-        RNA=sdec(sifreli_RNA,~psk)
-        ss_b=h(<RNA,~RNb>)
-        sifreliSS_b = senc(ss_b,~psk)
+    let 
+        psk = genpriv('psk')
+        Giz = senc(sifreliGiz, psk)
     in
-
-[!SharedKey(~psk),Fr(~RNb), In(sifreli_RNA)]
--->
-[!StateB(~psk,RNA,~RNb,ss_b), Out(<sifreli_RNB, sifreliSS_b>)]
-
-rule A1:
-
-    let
-        RNB = sdec(sifreli_RNB,~psk)
-        ss_b= sdec(sifreliSS_b,~psk)
-        ss_a=h(<~RNa,RNB>)
-        sifreliSS_a = senc(ss_a,~psk)
-    in
-
-[In(<sifreli_RNB, sifreliSS_b>),!StateA(~psk,~RNa)]
---[_restrict(ss_a = ss_b), AconstructSS(~RNa,RNB,ss_a,ss_b)]->
-[Out(sifreliSS_a)]
-
-rule B1:
-
-    let
-    ss_a= sdec(sifreliSS_a,~psk)
-    in
-[!StateB(~psk,RNA,~RNb,ss_b),In(sifreliSS_a)]
---[_restrict(ss_b = ss_a), BconstructSS(RNA,~RNb,ss_a,ss_b)]->
+[In(sifreliGiz)]
+--[Bknowsgiz(Giz)]->
 []
 
+lemma secrecy:
+  "All Giz #i. Bknowsgiz(Giz)@i ==> not (Ex #j. K(Giz)@j)"
 
-lemma authentication:
-  "All RNa RNb ss_a ss_b #i. AconstructSS(RNa,RNb,ss_a,ss_b) @i ==> Ex #j. BconstructSS(RNa,RNb,ss_a,ss_b) @j"
 
 
 end
