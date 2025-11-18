@@ -2,7 +2,7 @@ theory toy0
 
 begin
 
-builtins: symmetric-encryption 
+builtins: symmetric-encryption , diffie-hellman
 
 functions: genpriv/1 [private]
 
@@ -21,19 +21,25 @@ rule A0:
     let
         psk = genpriv('psk')
         sifreliGiz = senc(~giz, psk)
+        eph_a_acik = 'g'^ eph_a_giz
     in
 
-[Fr(~giz)]
+[Fr(~giz),
+Fr(eph_a_giz)
+]
 -->
-[Out(sifreliGiz)]
+[Out(<sifreliGiz, eph_a_acik>)]
 
 rule B0:
 
     let 
+        sifreliGiz = fst(a0cikti)
+        eph_a_acik = snd(a0cikti)
         psk = genpriv('psk')
         Giz = senc(sifreliGiz, psk)
+        ss = eph_a_acik ^ eph_b_giz
     in
-[In(sifreliGiz)]
+[In(a0cikti), Fr(eph_b_giz)]
 --[Bknowsgiz(Giz)]->
 []
 
