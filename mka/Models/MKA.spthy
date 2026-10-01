@@ -1,0 +1,175 @@
+theory Simplified_MKA
+
+/* 
+
+*****Simplified Model of the MKA Protocol*****   
+A                                             B
+|                                             |
+|----------- MKAPDU(A, SpeedA) -------------> |
+|                                             |
+| <---------- MKAPDU(B, SpeedB) ------------- |
+|                                             |
+|---- KEK = ATF(CAK,"KEK") ------------------ |
+|---- ICK = ATF(CAK,"ICK") ------------------ |
+|                                             |
+|---- KEK = ATF(CAK,"KEK") ------------------ |
+|---- ICK = ATF(CAK,"ICK") ------------------ |
+|                                             |
+| if SpeedA > SpeedB                          |
+|   SAK = ATF(CAK,"SAK")                      |
+|   C = Enc(KEK,SAK)                          |
+|   T = MAC(ICK,C)                            |
+|                                             |
+|-------------- (C,T) ----------------------> |
+|                                             |
+|                           Verify(T)         |
+|                           SAK=Dec(KEK,C)    |
+|                                             |
+|============= Shared SAK =================== |
+
+*/
+begin
+
+builtins: hashing
+
+functions:
+  a/0,
+  b/0,
+  kek/0,
+  ick/0,
+  sak/0,
+  atf/2,
+  senc/2,
+  sdec/2,
+  mac/2,
+  mkapdu/2
+
+equations:
+  sdec(senc(x,k),k) = x
+
+// Initialize the shared CAK for both parties a and b.
+rule InstallSharedCAK:
+  [ Fr(~Cak) ]
+  --[ CAKInstalled(~Cak) ]->
+  [ !CAK(a,~Cak), !CAK(b,~Cak) ]
+
+// a sends its MKAPDU containing its identity and speed, authenticated with ICK.
+rule SendMKAPDU_A:
+  [ !CAK(a,Cak), Fr(~Sa) ]
+  --[ SentMKAPDU(a,~Sa) ]->
+  [ Out(pair(mkapdu(a,~Sa), mac(mkapdu(a,~Sa), atf(Cak,ick)))), Speed(a,~Sa) ]
+
+// b sends its MKAPDU containing its identity and speed, authenticated with ICK.
+rule SendMKAPDU_B:
+  [ !CAK(b,Cak), Fr(~Sb) ]
+  --[ SentMKAPDU(b,~Sb) ]->
+  [ Out(pair(mkapdu(b,~Sb), mac(mkapdu(b,~Sb), atf(Cak,ick)))), Speed(b,~Sb) ]
+
+// a computes KEK = ATF(CAK,"KEK") and ICK = ATF(CAK,"ICK") by deriving explicit terms.
+rule DeriveKeys_A:
+  [ !CAK(a,Cak) ]
+  --[ DerivedKeys(a) ]->
+  [ !KEK(a,atf(Cak,kek)), !ICK(a,atf(Cak,ick)) ]
+
+// b computes KEK = ATF(CAK,"KEK") and ICK = ATF(CAK,"ICK") by deriving explicit terms.
+rule DeriveKeys_B:
+  [ !CAK(b,Cak) ]
+  --[ DerivedKeys(b) ]->
+  [ !KEK(b,atf(Cak,kek)), !ICK(b,atf(Cak,ick)) ]
+
+// b receives a's MKAPDU, verifies the MAC, and records that a is a peer.
+rule ReceiveMKAPDU_B:
+   [ In(pair(P, mac(P, atf(Cak,ick)))), !CAK(b,Cak), !ICK(b,atf(Cak,ick)) ]
+  --[ ReceivedMKAPDU(b,a) ]->
+   [ PeerSpeed(a), PeerDiscovered(b,a) ]
+
+// a receives b's MKAPDU, verifies the MAC, and records that b is a peer.
+rule ReceiveMKAPDU_A:
+   [ In(pair(P, mac(P, atf(Cak,ick)))), !CAK(a,Cak), !ICK(a,atf(Cak,ick)) ]
+  --[ ReceivedMKAPDU(a,b) ]->
+   [ PeerSpeed(b), PeerDiscovered(a,b) ]
+
+// Non-deterministically decide that a has higher speed than b.
+rule AHasHigherSpeed:
+  [ PeerSpeed(a), PeerSpeed(b), !CAK(a,Cak) ]
+  --[]->
+  [ Higher(a,b) ]
+
+// Non-deterministically decide that b has higher speed than a.
+rule BHasHigherSpeed:
+  [ PeerSpeed(a), PeerSpeed(b), !CAK(a,Cak) ]
+  --[]->
+  [ Higher(b,a) ]
+
+// a creates the SAK from the shared CAK when it is the faster party.
+rule CreateSAK_A:
+  [ Higher(a,b), !CAK(a,Cak) ]
+  --[ SAKCreated(a,atf(Cak,sak)) ]->
+  [ !SAK(a,atf(Cak,sak)) ]
+
+// b creates the SAK from the shared CAK when it is the faster party.
+rule CreateSAK_B:
+  [ Higher(b,a), !CAK(b,Cak) ]
+  --[ SAKCreated(b,atf(Cak,sak)) ]->
+  [ !SAK(b,atf(Cak,sak)) ]
+
+// a sends the encrypted SAK using KEK and authenticates it with ICK.
+// Uses the explicit terms C = senc(SAK, KEK) and T = mac(C, ICK).
+rule SendSAK_A:
+  [ !SAK(a,sak), !KEK(a,kek), !ICK(a,ick) ]
+  --[ SentSAK(a,sak) ]->
+  [ Out(pair(senc(sak,kek), mac(senc(sak,kek),ick))) ]
+
+// b sends the encrypted SAK using KEK and authenticates it with ICK.
+// Uses the explicit terms C = senc(SAK, KEK) and T = mac(C, ICK).
+rule SendSAK_B:
+  [ !SAK(b,sak), !KEK(b,kek), !ICK(b,ick) ]
+  --[ SentSAK(b,sak) ]->
+  [ Out(pair(senc(sak,kek), mac(senc(sak,kek),ick))) ]
+
+// a receives the encrypted SAK, verifies MAC, decrypts it using KEK, and installs it.
+rule ReceiveSAK_A:
+  [ In(pair(ciph, mac(ciph,ick))), !KEK(a,kek), !ICK(a,ick) ]
+  --[ SessionEstablished(a,sdec(ciph,kek)) ]->
+  [ InstalledSAK(a,sdec(ciph,kek)) ]
+
+// b receives the encrypted SAK, verifies MAC, decrypts it using KEK, and installs it.
+rule ReceiveSAK_B:
+  [ In(pair(ciph, mac(ciph,ick))), !KEK(b,kek), !ICK(b,ick) ]
+  --[ SessionEstablished(b,sdec(ciph,kek)) ]->
+  [ InstalledSAK(b,sdec(ciph,kek)) ]
+
+// a reveals the CAK to the attacker if compromised.
+rule RevealCAK_A:
+  [ !CAK(a,Cak) ]
+  --[ CAKReveal(a) ]->
+  [ Out(Cak) ]
+
+// b reveals the CAK to the attacker if compromised.
+rule RevealCAK_B:
+  [ !CAK(b,Cak) ]
+  --[ CAKReveal(b) ]->
+  [ Out(Cak) ]
+
+// Lemma: if a session is established, the SAK must have been sent by some party.
+lemma sak_agreement:
+"
+All X K #i.
+SessionEstablished(X,K) @ i ==>
+Ex Y #j.
+SentSAK(Y,K) @ j
+"
+
+// Lemma: if a session is established, the SAK remains secret unless the CAK is revealed.
+lemma sak_secrecy:
+"
+All X K #i.
+SessionEstablished(X,K) @ i ==>
+(
+  not(Ex #j. K(K) @ j)
+  |
+  Ex Y #r. CAKReveal(Y) @ r
+)
+"
+
+end

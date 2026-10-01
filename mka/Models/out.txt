@@ -1,0 +1,712 @@
+theory MKA_v6
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: count/1, fst/1, kdf/2, mac/2, mactrue/0, macverify/3, pair/2,
+           sdec/2, senc/2, snd/1
+equations:
+    fst(<x.1, x.2>) = x.1,
+    macverify(mac(M, K), M, K) = mactrue,
+    sdec(senc(x.1, x.2), x.2) = x.1,
+    snd(<x.1, x.2>) = x.2
+
+rule (modulo E) Setup_CAK:
+   [ Fr( ~cak ) ] --[ CAKSetup( ~cak ) ]-> [ !SharedCAK( ~cak ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Initial_KeyServer_Send:
+   [ !SharedCAK( cak ), Fr( ~mn ), Fr( ~kn ) ]
+  --[ SentInitialSAK( ~mn, ~kn, kdf(cak, <~mn, $Keyserver>) ) ]->
+   [
+   Out( <$Keyserver, ~mn, ~kn, 
+         senc(kdf(cak, <~mn, $Keyserver>), kdf(cak, 'KEK')), 
+         mac(<$Keyserver, ~mn, ~kn, 
+              senc(kdf(cak, <~mn, $Keyserver>), kdf(cak, 'KEK'))>,
+             kdf(cak, 'ICK'))
+        >
+   ),
+   InitialMessage( ~mn, ~kn,
+                   senc(kdf(cak, <~mn, $Keyserver>), kdf(cak, 'KEK')),
+                   mac(<$Keyserver, ~mn, ~kn, 
+                        senc(kdf(cak, <~mn, $Keyserver>), kdf(cak, 'KEK'))>,
+                       kdf(cak, 'ICK'))
+   ),
+   KSSTATE0( ~mn, ~kn, kdf(cak, <~mn, $Keyserver>) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+restriction Restr_Initial_Server_Receive_1:
+  "∀ x #NOW. (Restr_Initial_Server_Receive_1( x ) @ #NOW) ⇒ (x = mactrue)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x #NOW. (Restr_Initial_Server_Receive_1( x ) @ #NOW) ⇒ (x = mactrue)"
+  */
+
+rule (modulo E) Initial_Server_Receive:
+   [
+   In( <$Keyserver, mn, kn, c1, icv1> ), !SharedCAK( cak ),
+   InitialMessage( mn, kn, c1, icv1 )
+   ]
+  --[
+  InitialAckPrepared( count(mn), kn ),
+  Restr_Initial_Server_Receive_1( macverify(icv1, <$Keyserver, mn, kn, c1>,
+                                            kdf(cak, 'ICK'))
+  )
+  ]->
+   [
+   Out( <$Server, count(mn), kn, 
+         mac(<$Server, count(mn), kn>, kdf(cak, 'ICK'))>
+   ),
+   SSTATE1( count(mn), kn )
+   ]
+
+  /*
+  rule (modulo AC) Initial_Server_Receive:
+     [
+     In( <$Keyserver, mn, kn, c1, icv1> ), !SharedCAK( cak ),
+     InitialMessage( mn, kn, c1, icv1 )
+     ]
+    --[
+    InitialAckPrepared( count(mn), kn ), Restr_Initial_Server_Receive_1( z )
+    ]->
+     [
+     Out( <$Server, count(mn), kn, 
+           mac(<$Server, count(mn), kn>, kdf(cak, 'ICK'))>
+     ),
+     SSTATE1( count(mn), kn )
+     ]
+    variants (modulo AC)
+    1. $Keyserver
+             = $Keyserver.11
+       c1    = c1.13
+       cak   = cak.14
+       icv1  = icv1.15
+       kn    = kn.16
+       mn    = mn.17
+       z     = macverify(icv1.15, <$Keyserver.11, mn.17, kn.16, c1.13>,
+                         kdf(cak.14, 'ICK'))
+    
+    2. $Keyserver
+             = $Keyserver.16
+       c1    = c1.18
+       cak   = cak.19
+       icv1  = mac(<$Keyserver.16, mn.22, kn.21, c1.18>, kdf(cak.19, 'ICK'))
+       kn    = kn.21
+       mn    = mn.22
+       z     = mactrue
+  */
+
+restriction Restr_Initial_KeyServer_Confirm_1:
+  "∀ x #NOW x.1.
+    (Restr_Initial_KeyServer_Confirm_1( x, x.1 ) @ #NOW) ⇒ (x = x.1)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x #NOW x.1.
+    (Restr_Initial_KeyServer_Confirm_1( x, x.1 ) @ #NOW) ⇒ (x = x.1)"
+  */
+
+restriction Restr_Initial_KeyServer_Confirm_2:
+  "∀ x #NOW.
+    (Restr_Initial_KeyServer_Confirm_2( x ) @ #NOW) ⇒ (x = mactrue)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x #NOW.
+    (Restr_Initial_KeyServer_Confirm_2( x ) @ #NOW) ⇒ (x = mactrue)"
+  */
+
+rule (modulo E) Initial_KeyServer_Confirm:
+   [
+   In( <$Server, mn1, kn, icv2> ), !SharedCAK( cak ),
+   KSSTATE0( mn, kn, sak1 )
+   ]
+  --[
+  InitialSessionCompleted( mn1, kn, sak1 ),
+  Restr_Initial_KeyServer_Confirm_1( mn1, count(mn) ),
+  Restr_Initial_KeyServer_Confirm_2( macverify(icv2, <$Server, mn1, kn>,
+                                               kdf(cak, 'ICK'))
+  )
+  ]->
+   [ KSSTATE1( mn1, kn ) ]
+
+  /*
+  rule (modulo AC) Initial_KeyServer_Confirm:
+     [
+     In( <$Server, mn1, kn, icv2> ), !SharedCAK( cak ),
+     KSSTATE0( mn, kn, sak1 )
+     ]
+    --[
+    InitialSessionCompleted( mn1, kn, sak1 ),
+    Restr_Initial_KeyServer_Confirm_1( mn1, count(mn) ),
+    Restr_Initial_KeyServer_Confirm_2( z )
+    ]->
+     [ KSSTATE1( mn1, kn ) ]
+    variants (modulo AC)
+    1. $Server
+             = $Server.9
+       cak   = cak.9
+       icv2  = icv2.9
+       kn    = kn.9
+       mn1   = mn1.9
+       z     = macverify(icv2.9, <$Server.9, mn1.9, kn.9>, kdf(cak.9, 'ICK'))
+    
+    2. $Server
+             = $x.9
+       cak   = x.10
+       icv2  = mac(<$x.9, x.11, x.12>, kdf(x.10, 'ICK'))
+       kn    = x.12
+       mn1   = x.11
+       z     = mactrue
+  */
+
+rule (modulo E) Rekey_KeyServer_Send:
+   [ !SharedCAK( cak ), KSSTATE1( mn1, kn ) ]
+  --[
+  SentRekeySAK( count(mn1), count(kn), kdf(cak, <count(mn1), $Keyserver>)
+  ),
+  RekeyStarted( count(mn1), count(kn) )
+  ]->
+   [
+   Out( <$Keyserver, count(mn1), count(kn), 
+         senc(kdf(cak, <count(mn1), $Keyserver>), kdf(cak, 'KEK')), 
+         mac(<$Keyserver, count(mn1), count(kn), 
+              senc(kdf(cak, <count(mn1), $Keyserver>), kdf(cak, 'KEK'))>,
+             kdf(cak, 'ICK'))
+        >
+   ),
+   RekeyMessage( count(mn1), count(kn),
+                 senc(kdf(cak, <count(mn1), $Keyserver>), kdf(cak, 'KEK')),
+                 mac(<$Keyserver, count(mn1), count(kn), 
+                      senc(kdf(cak, <count(mn1), $Keyserver>), kdf(cak, 'KEK'))>,
+                     kdf(cak, 'ICK'))
+   ),
+   KSSTATE2( count(mn1), count(kn) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+restriction Restr_Rekey_Server_Receive_1:
+  "∀ x #NOW x.1.
+    (Restr_Rekey_Server_Receive_1( x, x.1 ) @ #NOW) ⇒ (x = x.1)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x #NOW x.1.
+    (Restr_Rekey_Server_Receive_1( x, x.1 ) @ #NOW) ⇒ (x = x.1)"
+  */
+
+restriction Restr_Rekey_Server_Receive_2:
+  "∀ x #NOW. (Restr_Rekey_Server_Receive_2( x ) @ #NOW) ⇒ (x = mactrue)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x #NOW. (Restr_Rekey_Server_Receive_2( x ) @ #NOW) ⇒ (x = mactrue)"
+  */
+
+rule (modulo E) Rekey_Server_Receive:
+   [
+   In( <$Keyserver, mn2, kn1, c2, icv3> ), !SharedCAK( cak ),
+   RekeyMessage( mn2, kn1, c2, icv3 ), SSTATE1( mn1, kn )
+   ]
+  --[
+  RekeyAckPrepared( count(mn2), kn1 ),
+  Restr_Rekey_Server_Receive_1( mn2, count(mn1) ),
+  Restr_Rekey_Server_Receive_2( macverify(icv3, <$Keyserver, mn2, kn1, c2>,
+                                          kdf(cak, 'ICK'))
+  )
+  ]->
+   [
+   Out( <$Server, count(mn2), kn1, 
+         mac(<$Server, count(mn2), kn1>, kdf(cak, 'ICK'))>
+   ),
+   SSTATE2( count(mn2), kn1 )
+   ]
+
+  /*
+  rule (modulo AC) Rekey_Server_Receive:
+     [
+     In( <$Keyserver, mn2, kn1, c2, icv3> ), !SharedCAK( cak ),
+     RekeyMessage( mn2, kn1, c2, icv3 ), SSTATE1( mn1, kn )
+     ]
+    --[
+    RekeyAckPrepared( count(mn2), kn1 ),
+    Restr_Rekey_Server_Receive_1( mn2, count(mn1) ),
+    Restr_Rekey_Server_Receive_2( z )
+    ]->
+     [
+     Out( <$Server, count(mn2), kn1, 
+           mac(<$Server, count(mn2), kn1>, kdf(cak, 'ICK'))>
+     ),
+     SSTATE2( count(mn2), kn1 )
+     ]
+    variants (modulo AC)
+    1. $Keyserver
+             = $Keyserver.13
+       c2    = c2.15
+       cak   = cak.16
+       icv3  = icv3.17
+       kn1   = kn1.19
+       mn2   = mn2.21
+       z     = macverify(icv3.17, <$Keyserver.13, mn2.21, kn1.19, c2.15>,
+                         kdf(cak.16, 'ICK'))
+    
+    2. $Keyserver
+             = $Keyserver.18
+       c2    = c2.20
+       cak   = cak.21
+       icv3  = mac(<$Keyserver.18, mn2.26, kn1.24, c2.20>, kdf(cak.21, 'ICK'))
+       kn1   = kn1.24
+       mn2   = mn2.26
+       z     = mactrue
+  */
+
+restriction Restr_Rekey_KeyServer_Confirm_1:
+  "∀ x #NOW x.1.
+    (Restr_Rekey_KeyServer_Confirm_1( x, x.1 ) @ #NOW) ⇒ (x = x.1)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x #NOW x.1.
+    (Restr_Rekey_KeyServer_Confirm_1( x, x.1 ) @ #NOW) ⇒ (x = x.1)"
+  */
+
+restriction Restr_Rekey_KeyServer_Confirm_2:
+  "∀ x #NOW. (Restr_Rekey_KeyServer_Confirm_2( x ) @ #NOW) ⇒ (x = mactrue)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x #NOW. (Restr_Rekey_KeyServer_Confirm_2( x ) @ #NOW) ⇒ (x = mactrue)"
+  */
+
+rule (modulo E) Rekey_KeyServer_Confirm:
+   [
+   In( <$Server, count(mn2), kn1, icv4> ), !SharedCAK( cak ),
+   KSSTATE2( mn2, kn1 )
+   ]
+  --[
+  RekeySessionCompleted( count(mn2), kn1, kdf(cak, <mn2, $Keyserver>) ),
+  Restr_Rekey_KeyServer_Confirm_1( count(mn2), count(mn2) ),
+  Restr_Rekey_KeyServer_Confirm_2( macverify(icv4,
+                                             <$Server, count(mn2), kn1>, kdf(cak, 'ICK'))
+  )
+  ]->
+   [ ]
+
+  /*
+  rule (modulo AC) Rekey_KeyServer_Confirm:
+     [
+     In( <$Server, count(mn2), kn1, icv4> ), !SharedCAK( cak ),
+     KSSTATE2( mn2, kn1 )
+     ]
+    --[
+    RekeySessionCompleted( count(mn2), kn1, kdf(cak, <mn2, $Keyserver>) ),
+    Restr_Rekey_KeyServer_Confirm_1( count(mn2), count(mn2) ),
+    Restr_Rekey_KeyServer_Confirm_2( z )
+    ]->
+     [ ]
+    variants (modulo AC)
+    1. $Server
+             = $Server.8
+       cak   = cak.8
+       icv4  = icv4.8
+       kn1   = kn1.8
+       mn2   = mn2.8
+       z     = macverify(icv4.8, <$Server.8, count(mn2.8), kn1.8>,
+                         kdf(cak.8, 'ICK'))
+    
+    2. $Server
+             = $x.8
+       cak   = x.9
+       icv4  = mac(<$x.8, count(x.10), x.11>, kdf(x.9, 'ICK'))
+       kn1   = x.11
+       mn2   = x.10
+       z     = mactrue
+  */
+
+lemma executable:
+  exists-trace
+  "∃ mn1 kn sak1 mn3 kn1 sak2 #i #j.
+    (InitialSessionCompleted( mn1, kn, sak1 ) @ #i) ∧
+    (RekeySessionCompleted( mn3, kn1, sak2 ) @ #j)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ mn1 kn sak1 mn3 kn1 sak2 #i #j.
+  (InitialSessionCompleted( mn1, kn, sak1 ) @ #i) ∧
+  (RekeySessionCompleted( mn3, kn1, sak2 ) @ #j)"
+*/
+simplify
+solve( !SharedCAK( cak ) ▶₁ #i )
+  case Setup_CAK
+  solve( KSSTATE0( mn, kn, sak1 ) ▶₂ #i )
+    case Initial_KeyServer_Send
+    solve( !SharedCAK( cak.2 ) ▶₁ #j )
+      case Setup_CAK
+      solve( KSSTATE2( mn2, kn1 ) ▶₂ #j )
+        case Rekey_KeyServer_Send
+        solve( !KU( count(count(count(~mn.1))) ) @ #vk.10 )
+          case Rekey_Server_Receive
+          solve( !KU( count(~mn) ) @ #vk.4 )
+            case Initial_Server_Receive
+            solve( !KU( mac(<$Server, count(~mn), ~kn>, kdf(~cak, 'ICK')) ) @ #vk.9 )
+              case Initial_Server_Receive
+              solve( !KU( mac(<$Server.1, count(count(count(~mn.1))), count(~kn.1)>,
+                              kdf(~cak.1, 'ICK'))
+                     ) @ #vk.18 )
+                case Rekey_Server_Receive
+                solve( !KU( mac(<$Server.2, count(~mn.1), ~kn.1>, kdf(~cak.2, 'ICK'))
+                       ) @ #vk.29 )
+                  case Initial_Server_Receive
+                  solve( !KU( ~kn ) @ #vk.12 )
+                    case Initial_KeyServer_Send
+                    solve( !KU( ~kn.1 ) @ #vk.26 )
+                      case Initial_KeyServer_Send
+                      solve( !KU( ~mn.1 ) @ #vk.36 )
+                        case Initial_KeyServer_Send
+                        solve( !KU( ~mn ) @ #vk.41 )
+                          case Initial_KeyServer_Send
+                          solve( !KU( count(~mn.1) ) @ #vk.31 )
+                            case Initial_Server_Receive
+                            solve( !KU( count(~kn.1) ) @ #vk.27 )
+                              case Rekey_KeyServer_Send
+                              solve( !KU( count(count(~mn.1)) ) @ #vk.33 )
+                                case Rekey_KeyServer_Send
+                                solve( !KU( senc(kdf(~cak.1, <count(count(~mn.1)), $Keyserver.2>),
+                                                 kdf(~cak.1, 'KEK'))
+                                       ) @ #vk.35 )
+                                  case Rekey_KeyServer_Send
+                                  solve( !KU( mac(<$Keyserver.2, count(count(~mn.1)), count(~kn.1), 
+                                                   senc(kdf(~cak.1, <count(count(~mn.1)), $Keyserver.2>),
+                                                        kdf(~cak.1, 'KEK'))
+                                                  >,
+                                                  kdf(~cak.1, 'ICK'))
+                                         ) @ #vk.36 )
+                                    case Rekey_KeyServer_Send
+                                    solve( !KU( senc(kdf(~cak.2, <~mn.1, $Keyserver.3>), kdf(~cak.2, 'KEK'))
+                                           ) @ #vk.39 )
+                                      case Initial_KeyServer_Send
+                                      solve( !KU( mac(<$Keyserver.3, ~mn.1, ~kn.1, 
+                                                       senc(kdf(~cak.2, <~mn.1, $Keyserver.3>),
+                                                            kdf(~cak.2, 'KEK'))
+                                                      >,
+                                                      kdf(~cak.2, 'ICK'))
+                                             ) @ #vk.40 )
+                                        case Initial_KeyServer_Send
+                                        solve( !KU( senc(kdf(~cak, <~mn, $Keyserver>), kdf(~cak, 'KEK'))
+                                               ) @ #vk.43 )
+                                          case Initial_KeyServer_Send
+                                          solve( !KU( mac(<$Keyserver, ~mn, ~kn, 
+                                                           senc(kdf(~cak, <~mn, $Keyserver>),
+                                                                kdf(~cak, 'KEK'))
+                                                          >,
+                                                          kdf(~cak, 'ICK'))
+                                                 ) @ #vk.44 )
+                                            case Initial_KeyServer_Send
+                                            SOLVED // trace found
+                                          qed
+                                        qed
+                                      qed
+                                    qed
+                                  qed
+                                qed
+                              qed
+                            qed
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma initial_agreement:
+  all-traces
+  "∀ mn kn sak #i.
+    (InitialSessionCompleted( mn, kn, sak ) @ #i) ⇒
+    (∃ #j. (SentInitialSAK( mn, kn, sak ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ mn kn sak #i.
+  (InitialSessionCompleted( mn, kn, sak ) @ #i)
+ ∧
+  ∀ #j. (SentInitialSAK( mn, kn, sak ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !SharedCAK( cak ) ▶₁ #i )
+  case Setup_CAK
+  solve( KSSTATE0( mn, kn, sak ) ▶₂ #i )
+    case Initial_KeyServer_Send
+    solve( !KU( count(~mn) ) @ #vk.3 )
+      case Initial_Server_Receive
+      solve( !KU( mac(<$Server, count(~mn), ~kn>, kdf(~cak, 'ICK')) ) @ #vk.7 )
+        case Initial_Server_Receive
+        solve( !KU( ~kn ) @ #vk.6 )
+          case Initial_KeyServer_Send
+          solve( !KU( ~mn ) @ #vk.11 )
+            case Initial_KeyServer_Send
+            solve( !KU( senc(kdf(~cak, <~mn, $Keyserver>), kdf(~cak, 'KEK'))
+                   ) @ #vk.13 )
+              case Initial_KeyServer_Send
+              solve( !KU( mac(<$Keyserver, ~mn, ~kn, 
+                               senc(kdf(~cak, <~mn, $Keyserver>), kdf(~cak, 'KEK'))>,
+                              kdf(~cak, 'ICK'))
+                     ) @ #vk.14 )
+                case Initial_KeyServer_Send
+                SOLVED // trace found
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma rekey_agreement:
+  all-traces
+  "∀ mn kn sak #i.
+    (RekeySessionCompleted( mn, kn, sak ) @ #i) ⇒
+    (∃ #j. (SentRekeySAK( mn, kn, sak ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ mn kn sak #i.
+  (RekeySessionCompleted( mn, kn, sak ) @ #i)
+ ∧
+  ∀ #j. (SentRekeySAK( mn, kn, sak ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !SharedCAK( cak ) ▶₁ #i )
+  case Setup_CAK
+  solve( KSSTATE2( mn2, kn ) ▶₂ #i )
+    case Rekey_KeyServer_Send
+    solve( !KU( count(count(count(~mn))) ) @ #vk.3 )
+      case Rekey_Server_Receive
+      solve( !KU( mac(<$Server, count(count(count(~mn))), count(~kn)>,
+                      kdf(~cak, 'ICK'))
+             ) @ #vk.7 )
+        case Rekey_Server_Receive
+        solve( !KU( mac(<$Server.1, count(~mn), ~kn>, kdf(~cak.1, 'ICK'))
+               ) @ #vk.17 )
+          case Initial_Server_Receive
+          solve( !KU( ~kn ) @ #vk.16 )
+            case Initial_KeyServer_Send
+            solve( !KU( ~mn ) @ #vk.26 )
+              case Initial_KeyServer_Send
+              solve( !KU( count(~mn) ) @ #vk.20 )
+                case Initial_Server_Receive
+                solve( !KU( count(~kn) ) @ #vk.16 )
+                  case Rekey_KeyServer_Send
+                  solve( !KU( count(count(~mn)) ) @ #vk.22 )
+                    case Rekey_KeyServer_Send
+                    solve( !KU( senc(kdf(~cak, <count(count(~mn)), $Keyserver.1>),
+                                     kdf(~cak, 'KEK'))
+                           ) @ #vk.24 )
+                      case Rekey_KeyServer_Send
+                      solve( !KU( mac(<$Keyserver.1, count(count(~mn)), count(~kn), 
+                                       senc(kdf(~cak, <count(count(~mn)), $Keyserver.1>), kdf(~cak, 'KEK'))>,
+                                      kdf(~cak, 'ICK'))
+                             ) @ #vk.25 )
+                        case Rekey_KeyServer_Send
+                        solve( !KU( senc(kdf(~cak.1, <~mn, $Keyserver.2>), kdf(~cak.1, 'KEK'))
+                               ) @ #vk.28 )
+                          case Initial_KeyServer_Send
+                          solve( !KU( mac(<$Keyserver.2, ~mn, ~kn, 
+                                           senc(kdf(~cak.1, <~mn, $Keyserver.2>), kdf(~cak.1, 'KEK'))>,
+                                          kdf(~cak.1, 'ICK'))
+                                 ) @ #vk.29 )
+                            case Initial_KeyServer_Send
+                            SOLVED // trace found
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma initial_key_confirmation:
+  all-traces
+  "∀ mn kn sak #i.
+    (InitialSessionCompleted( mn, kn, sak ) @ #i) ⇒
+    (∃ #j. (InitialAckPrepared( mn, kn ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ mn kn sak #i.
+  (InitialSessionCompleted( mn, kn, sak ) @ #i)
+ ∧
+  ∀ #j. (InitialAckPrepared( mn, kn ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !SharedCAK( cak ) ▶₁ #i )
+  case Setup_CAK
+  solve( KSSTATE0( mn, kn, sak ) ▶₂ #i )
+    case Initial_KeyServer_Send
+    solve( !KU( count(~mn) ) @ #vk.3 )
+      case Initial_Server_Receive
+      by contradiction /* from formulas */
+    next
+      case c_count
+      solve( !KU( mac(<$Server, count(~mn), ~kn>, kdf(~cak, 'ICK')) ) @ #vk.6 )
+        case Initial_Server_Receive
+        by contradiction /* from formulas */
+      next
+        case c_mac
+        solve( !KU( kdf(~cak, 'ICK') ) @ #vk.10 )
+          case c_kdf
+          by solve( !KU( ~cak ) @ #vk.11 )
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma rekey_key_confirmation:
+  all-traces
+  "∀ mn kn sak #i.
+    (RekeySessionCompleted( mn, kn, sak ) @ #i) ⇒
+    (∃ #j. (RekeyAckPrepared( mn, kn ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ mn kn sak #i.
+  (RekeySessionCompleted( mn, kn, sak ) @ #i)
+ ∧
+  ∀ #j. (RekeyAckPrepared( mn, kn ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !SharedCAK( cak ) ▶₁ #i )
+  case Setup_CAK
+  solve( KSSTATE2( mn2, kn ) ▶₂ #i )
+    case Rekey_KeyServer_Send
+    solve( !KU( count(count(count(~mn))) ) @ #vk.3 )
+      case Rekey_Server_Receive
+      by contradiction /* from formulas */
+    next
+      case c_count
+      solve( !KU( mac(<$Server, count(count(count(~mn))), count(~kn)>,
+                      kdf(~cak, 'ICK'))
+             ) @ #vk.6 )
+        case Rekey_Server_Receive
+        by contradiction /* from formulas */
+      next
+        case c_mac
+        solve( !KU( count(~mn) ) @ #vk.12 )
+          case Initial_Server_Receive
+          solve( !KU( mac(<$Server.1, count(~mn), ~kn>, kdf(~cak.2, 'ICK'))
+                 ) @ #vk.16 )
+            case Initial_Server_Receive
+            solve( !KU( kdf(~cak, 'ICK') ) @ #vk.19 )
+              case c_kdf
+              by solve( !KU( ~cak ) @ #vk.26 )
+            qed
+          next
+            case c_mac
+            solve( !KU( kdf(~cak, 'ICK') ) @ #vk.21 )
+              case c_kdf
+              by solve( !KU( ~cak ) @ #vk.29 )
+            qed
+          qed
+        next
+          case c_count
+          solve( !KU( mac(<$Server.1, count(~mn), ~kn>, kdf(~cak.2, 'ICK'))
+                 ) @ #vk.15 )
+            case Initial_Server_Receive
+            solve( !KU( kdf(~cak, 'ICK') ) @ #vk.18 )
+              case c_kdf
+              by solve( !KU( ~cak ) @ #vk.26 )
+            qed
+          next
+            case c_mac
+            solve( !KU( kdf(~cak, 'ICK') ) @ #vk.19 )
+              case c_kdf
+              by solve( !KU( ~cak ) @ #vk.22 )
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma rekey_after_initial_completion:
+  all-traces
+  "∀ mn2 kn1 sak2 #i.
+    (RekeySessionCompleted( mn2, kn1, sak2 ) @ #i) ⇒
+    (∃ mn1 kn sak1 #j.
+      (InitialSessionCompleted( mn1, kn, sak1 ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ mn2 kn1 sak2 #i.
+  (RekeySessionCompleted( mn2, kn1, sak2 ) @ #i)
+ ∧
+  ∀ mn1 kn sak1 #j.
+   (InitialSessionCompleted( mn1, kn, sak1 ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !SharedCAK( cak ) ▶₁ #i )
+  case Setup_CAK
+  solve( KSSTATE2( mn2, kn1 ) ▶₂ #i )
+    case Rekey_KeyServer_Send
+    by contradiction /* from formulas */
+  qed
+qed
+
+lemma rekey_cannot_start_before_initial_completion:
+  all-traces
+  "∀ mn2 kn1 #i.
+    (RekeyStarted( mn2, kn1 ) @ #i) ⇒
+    (∃ mn1 kn sak1 #j.
+      (InitialSessionCompleted( mn1, kn, sak1 ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ mn2 kn1 #i.
+  (RekeyStarted( mn2, kn1 ) @ #i)
+ ∧
+  ∀ mn1 kn sak1 #j.
+   (InitialSessionCompleted( mn1, kn, sak1 ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !SharedCAK( cak ) ▶₀ #i )
+  case Setup_CAK
+  solve( KSSTATE1( mn1, kn ) ▶₁ #i )
+    case Initial_KeyServer_Confirm
+    by contradiction /* from formulas */
+  qed
+qed
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2026-03-08 10:05:47.616272992 UTC
+*/
+
+end

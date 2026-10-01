@@ -1,0 +1,77 @@
+/*
+***** Simplified MKA Protocol with Rekey *****
+
+KeyServer                                                  Server
+    |                                                         |
+    |========== Pre-Shared CAK ==============================>|
+    |                                                         |
+    | KEK = KDF(CAK, "KEK")                                   |
+    | ICK = KDF(CAK, "ICK")                                   |
+    | MN_KS = GenMN($KeyServer)                               |
+    | MN_S = GenMN($Server)                                   |    
+    | MN_KS1 = count(MN_KS)                                   |
+    | Fr(KS_nonce0)                                           |
+    | Fr(KN)                                                  |
+    | SAK1 = KDF(CAK, <$Keyserver, KN, KS_nonce0 >)           |                                         
+    | C1   = Enc(SAK1, KEK)                                   |
+    | ICV1 = MAC(<$Keyserver, MN_KS1, KN, C1>, ICK)           |
+    | MKAPDU0_keyserver = <$Keyserver, MN_KS1, KN, C1, ICV1>  |
+    | KSSTATE0(MN_KS1,MN_S, KN, SAK1)                         |
+    |                                                         |
+    |--------------------(MKAPDU0_keyserver)----------------->|
+    |                                                         |
+    |                                    ICK = KDF(CAK, "ICK")|
+    |                                    KEK = KDF(CAK, "KEK")|
+    |                                MN_KS = GenMN($KeyServer)|
+    |                                    MN_S = GenMN($Server)| 
+    |                          restrict(MN_KS1 = count(MN_KS))|
+    |                                restrict(ICV1 mac verify)|
+    |                                           SAK1 = Dec(C1)|
+    |                      ICV2 = MAC(<$Server, MN1, KN>, ICK)|
+    |                                      MN_S1 = count(MN_S)|
+    |              MKAPDU0_server = <$Server, MN_S1, KN, ICV2>|
+    |                          SState(MN_KS1, MN_S1, KN, SAK1)|
+    |							                              |              
+    |<--------------------(MKAPDU0_server)--------------------|
+    | In(KSSTATE0(MN_KS1,MN_S, KN, SAK1))                     |
+    | restrict(MN_S1 = Count(MN_S))                           |
+    | restrict(ICV2 MAC verify)                               |
+    | restrict(KN(in KS state)= KN)                           |
+    | KSTATE1(MN_KS1, MN_S1, KN, SAK1)                        |
+    |                                                         |
+    |============= Shared Fresh SAK1 =========================|
+    |                                                         |
+    |------------ Periodic Rekey Trigger ---------------------|
+    | In(KSSTATE1(MN_KS1, MN_S1, KN, SAK1))                   |
+    | KEK = KDF(CAK, "KEK")                                   |
+    | ICK = KDF(CAK, "ICK")                                   |
+    | MN_KS2  = Count(MN_KS1)                                 |
+    | Fr(KS_nonce1)                                           |
+    | KN1  = Count(KN)                                        |
+    | SAK2 = KDF(CAK, <$Keyserver, KN1, KS_nonce1>)           |
+    | C2   = Enc(SAK2, KEK)                                   |
+    | ICV3 = MAC(<$Keyserver, MN_KS2, KN1, C2>, ICK)          |
+    | MKAPDU1_keyserver = <$Keyserver, MN_KS2, KN1, C2, ICV3> |
+    | KSTATE2(MN_KS1, MN_S1, KN, SAK1 ,SAK2, MN_KS2, KN1)     |
+    |                                                         |    
+    |--------------------(MKAPDU1_keyserver)----------------->|
+    |                      In(SState(MN_KS1, MN_S1, KN, SAK1))|
+    |                                    ICK = KDF(CAK, "ICK")|
+    |                                    KEK = KDF(CAK, "KEK")|
+    |                                restrict(ICV3 mac verify)|
+    |                         restrict(MN_KS2 = count(MN_KS1))|
+    |                                restrict(KN1 = count(KN))|
+    |                                           SAK2 = Dec(C2)|
+    |                                     MN_S2 = Count(MN_S1)|
+    |                   ICV4 = MAC(<$Server, MN_S2, KN1>, ICK)|
+    |             MKAPDU1_server = <$Server, MN_S2, KN1, ICV4>|
+    |                                                         |
+    |<--------------------(MKAPDU1_server)--------------------|
+    | In(KSSTATE2(MN_KS1, MN_S1, KN, SAK1 ,SAK2, MN_KS2, KN1))|                      
+    | restrict(MN_S2 = Count(MN_S1))                          |
+    | restrict(KN1 = KN1(In KS state))                        |
+    |                                                         |
+    |============= Shared Fresh SAK2 =========================|
+    |                                                         |
+    |============= DONE ======================================|
+*/

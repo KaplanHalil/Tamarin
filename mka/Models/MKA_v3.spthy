@@ -1,0 +1,216 @@
+theory Simplified_MKA_halil_Enhanced
+
+/*
+***** Enhanced Simplified MKA Protocol with Rekey *****
+
+KeyServer                                             Server
+    |                                                    |
+    |========== Pre-Shared CAK =========================>|
+    |                                                    |
+    | KEK = ATF(CAK,"KEK")                              |
+    | ICK = ATF(CAK,"ICK")                              |
+    |                                                    |
+    | sid1 = Fresh()                                     |
+    | SAK1 = ATF(CAK,sid1)                              |
+    |                                                    |
+    | C1 = Enc(<sid1,SAK1>,KEK)                         |
+    | T1 = MAC(<C1,sid1>,ICK)                           |
+    |                                                    |
+    |-----------------(C1,T1)-------------------------->|
+    |                                                    |
+    |                                      Verify(T1)   |
+    |                                      SAK1=Dec(C1) |
+    |                                                    |
+    |                      ACK1 = MAC(<sid1>,SAK1)      |
+    |<------------------- ACK1 -------------------------|
+    |                                                    |
+    |                                                    |
+    |------------ Periodic Rekey Trigger -------------- |
+    |                                                    |
+    | sid2 = Fresh()                                     |
+    | SAK2 = ATF(CAK,sid2)                              |
+    |                                                    |
+    | C2 = Enc(<sid2,SAK2>,KEK)                         |
+    | T2 = MAC(<C2,sid2>,ICK)                           |
+    |                                                    |
+    |-----------------(C2,T2)-------------------------->|
+    |                                                    |
+    |                                      Verify(T2)   |
+    |                                      SAK2=Dec(C2) |
+    |                                                    |
+    |                      ACK2 = MAC(<sid2>,SAK2)      |
+    |<------------------- ACK2 -------------------------|
+    |                                                    |
+    |============= Shared Fresh SAK2 ===================|
+    |                                                    |
+*/
+
+begin
+
+builtins: symmetric-encryption, hashing
+
+functions:
+  atf/2,
+  mac/2,
+  macverify/3,
+  mactrue/0
+
+equations:
+  macverify(mac(M,K),M,K) = mactrue
+
+/* ------------------------------------------------------------
+   Long-term setup
+   ------------------------------------------------------------ */
+rule Setup_CAK:
+  [ Fr(~cak) ]
+  --[ CAKSetup(~cak) ]->
+  [ !SharedCAK(~cak) ]
+
+/* ------------------------------------------------------------
+   Key Server: derive KEK/ICK/SAK and send encrypted key bundle
+   ------------------------------------------------------------ */
+rule KeyServer_Send:
+  
+let
+  kek = atf(cak,'KEK')
+  ick = atf(cak,'ICK')
+  sak = atf(cak,sid)
+  payload = <sid,sak,$Keyserver,$Server>
+  C = senc(payload,kek)
+  T = mac(<C,sid,$Keyserver,$Server>,ick)
+in
+  [ !SharedCAK(cak), Fr(sid) ]--[
+      SentSAK($Keyserver,$Server,sid,sak),
+      SecretSAK(sak),
+      SessionStarted($Keyserver,$Server,sid)
+    ]->
+  [ Out(<C,T>),
+    PendingAck($Keyserver,$Server,sid,sak),
+    !StoredSAK(sid,sak) ]
+
+/* ------------------------------------------------------------
+   Server: verify MAC, decrypt payload, and establish the session
+   ------------------------------------------------------------ */
+rule Server_Receive:
+  
+  let
+      kek = atf(cak,'KEK')
+      ick = atf(cak,'ICK')
+      payload = sdec(C,kek)
+      sid = fst(payload)
+      tmp1 = snd(payload)
+      sak = fst(tmp1)
+      tmp2 = snd(tmp1)
+      ks = fst(tmp2)
+      sv = snd(tmp2)
+      mactrue = macverify(T,<C,sid,ks,sv>,ick)
+  in
+  [ In(<C,T>), !SharedCAK(cak) ]--[
+      SessionEstablished($Server,$Keyserver,sid,sak),
+      AckPrepared($Server,$Keyserver,sid)
+    ]->
+  [ Out(mac(<sid,$Server,$Keyserver>,sak)) ]
+
+/* ------------------------------------------------------------
+   Key confirmation: KeyServer receives the ACK from Server
+   ------------------------------------------------------------ */
+rule KeyServer_Confirm:
+  [ PendingAck($Keyserver,$Server,sid,sak),
+    In(mac(<sid,$Server,$Keyserver>,sak)) ]
+  --[
+      AckReceived($Keyserver,$Server,sid),
+      SessionCompleted($Keyserver,$Server,sid,sak)
+    ]->
+  []
+
+/* ------------------------------------------------------------
+   Optional compromise rules for analysis
+   ------------------------------------------------------------ */
+rule Reveal_CAK:
+  [ !SharedCAK(cak) ]
+  --[ RevealCAK(cak) ]->
+  [ Out(cak) ]
+
+rule Reveal_SAK:
+  [ !StoredSAK(sid,sak) ]
+  --[ RevealSAK(sid,sak) ]->
+  [ Out(sak) ]
+
+/* ------------------------------------------------------------
+   Lemmas
+   ------------------------------------------------------------ */
+
+// Bu lemma, protokolün tamamlanabilir bir oturumu desteklediğini kontrol eder.
+lemma executable:
+  exists-trace
+  "
+    Ex ks sv sid sak #i.
+      SessionCompleted(ks,sv,sid,sak)@i
+  "
+
+// Bu lemma, tamamlanan bir oturum için gönderilen SAK ile oturumdaki SAK arasında anlaşma olduğunu doğrular.
+// Bu lemma, tamamlanan oturumda kullanılan SAK'ın gerçekten gönderildiğini doğrular.
+lemma agreement_on_sak:
+  "
+  All ks sv sid sak #i.
+    SessionCompleted(ks,sv,sid,sak)@i
+    ==>
+    (Ex #j.
+      SentSAK(ks,sv,sid,sak)@j)
+  "
+
+// Bu lemma, aynı SAK için tamamlanan oturumun tekil olduğunu ve çakışan oturum olmadığını garanti eder.
+lemma injective_agreement:
+  "
+  All ks sv sid sak #i.
+    SessionCompleted(ks,sv,sid,sak)@i
+    ==>
+    (Ex #j.
+      SentSAK(ks,sv,sid,sak)@j
+      &
+      (All #k.
+        SessionCompleted(ks,sv,sid,sak)@k
+        ==> #k = #i))
+  "
+
+// Bu lemma, KeyServer'ın Server'dan bir anahtar onay mesajı (ACK) aldığına dair güvenlik sağlar.
+lemma key_confirmation:
+  "
+  All ks sv sid sak #i.
+    SessionCompleted(ks,sv,sid,sak)@i
+    ==>
+    (Ex #j.
+      AckReceived(ks,sv,sid)@j)
+  "
+
+// Bu lemma, aynı SAK ve oturum kimliğiyle birden fazla tamamlanmış oturumun oluşmadığını doğrular.
+lemma no_replay_accept:
+  "
+  All ks sv sid sak #i #j.
+    SessionCompleted(ks,sv,sid,sak)@i
+    & SessionCompleted(ks,sv,sid,sak)@j
+    ==>
+    #i = #j
+  "
+
+// Bu lemma, SAK açığa çıkarılmadığı sürece saldırganın SAK'ı öğrenemeyeceğini garanti eder.
+lemma sak_secrecy_no_reveal:
+  "
+  All ks sv sid sak #i.
+    SessionCompleted(ks,sv,sid,sak)@i
+    & not(Ex #j. RevealSAK(sid,sak)@j)
+    ==>
+    not(Ex #k. K(sak)@k)
+  "
+
+// Bu lemma, CAK açığa çıkarılmadığı sürece saldırganın CAK'ı öğrenemeyeceğini garanti eder.
+lemma cak_secrecy_no_reveal:
+  "
+  All cak #i.
+    CAKSetup(cak)@i
+    & not(Ex #j. RevealCAK(cak)@j)
+    ==>
+    not(Ex #k. K(cak)@k)
+  "
+
+end

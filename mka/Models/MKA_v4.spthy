@@ -1,0 +1,287 @@
+theory MKA_v4
+/*
+***** Enhanced Simplified MKA Protocol with Rekey *****
+
+KeyServer                                             Server
+    |                                                   |
+    |========== Pre-Shared CAK ========================>|
+    |                                                   |
+    | KEK = KDF(CAK,"KEK")                              |
+    | ICK = KDF(CAK,"ICK")                              |
+    |                                                   |
+    | sid1 = Fresh()                                    |
+    | SAK1 = KDF(CAK,sid1)                              |
+    |                                                   |
+    | C1 = Enc(<sid1,SAK1>, KEK)                        |
+    | ICV1 = MAC(<C1,sid1>, ICK)                        |
+    |                                                   |
+    |-----------------(C1,ICV1)-------------------------->|
+    |                                                   |
+    |                                      Verify(ICV1) |
+    |                                      SAK1=Dec(C1) |
+    |                                                   |
+    |                      ACK1 = MAC(<sid1>,SAK1)      |
+    |<------------------- ACK1 -------------------------|
+    |                                                   |
+    |============= Shared Fresh SAK2 ===================|
+    |                                                   |
+    |                                                   |
+    |------------ Periodic Rekey Trigger ---------------|
+    |                                                   |
+    | sid2 = Fresh()                                    |
+    | SAK2 = KDF(CAK,sid2)                              |
+    |                                                   |
+    | C2 = Enc(<sid2,SAK2>,KEK)                         |
+    | ICV2 = MAC(<C2,sid2>,ICK)                         |
+    |                                                   |
+    |-----------------(C2,ICV2)-------------------------->|
+    |                                                   |
+    |                                      Verify(ICV2) |
+    |                                      SAK2=Dec(C2) |
+    |                                                   |
+    |                      ACK2 = MAC(<sid2>,SAK2)      |
+    |<------------------- ACK2 -------------------------|
+    |                                                   |
+    |============= Shared Fresh SAK2 ===================|
+    |                                                   |
+*/
+begin
+
+builtins: symmetric-encryption, hashing
+
+functions:
+  kdf/2,
+  mac/2,
+  macverify/3,
+  mactrue/0
+
+equations:
+  macverify(mac(M,K),M,K) = mactrue
+
+// Paylaşılan CAK'ı sisteme yükler ve uzun vadeli bir gerçek olarak depolar.
+rule Setup_CAK:
+  [ Fr(~cak) ]
+  --[ CAKSetup(~cak) ]->
+  [ !SharedCAK(~cak) ]
+
+// KeyServer, ilk oturum için SAK'ı türetir, KEK ile şifreler, ICK ile MAC'lar ve Server'a gönderir.
+rule Initial_KeyServer_Send:
+  
+let
+  kek = kdf(cak,'KEK')
+  ick = kdf(cak,'ICK')
+  sak1 = kdf(cak,~sid1)
+  payload1 = <~sid1,sak1>
+  c1 = senc(payload1,kek)
+  icv1 = mac(<c1,~sid1>,ick)
+in
+  [ !SharedCAK(cak), Fr(~sid1) ]--[
+    SentInitialSAK(~sid1,sak1),
+    SecretSAK(~sid1,sak1),
+    InitialSessionStarted(~sid1)
+  ]->
+  [ Out(<c1,icv1>),
+    InitialPending(cak,~sid1,sak1),
+    !StoredSAK(~sid1,sak1) ]
+
+// Server, gelen şifreli yükü doğrular, MAC'ı kontrol eder, SAK'ı çözer ve bir onay (ACK) gönderir.
+rule Initial_Server_Receive:
+  
+let
+  kek = kdf(cak,'KEK')
+  ick = kdf(cak,'ICK')
+  payload1 = sdec(c1,kek)
+  sid1 = fst(payload1)
+  sak1 = snd(payload1)
+in
+  [ In(<c1,icv1>), !SharedCAK(cak) ]--[
+    _restrict(macverify(icv1,<c1,sid1>,ick)=mactrue),
+    InitialSessionEstablished(sid1,sak1),
+    InitialAckPrepared(sid1,sak1)
+  ]->
+  [ Out(mac(<sid1>,sak1)) ]
+
+// KeyServer, Server'dan gelen onayı alır ve ilk oturumun başarıyla tamamlandığını işaretler.
+rule Initial_KeyServer_Confirm:
+  [ InitialPending(cak,sid1,sak1),
+    In(mac(<sid1>,sak1)) ]
+  --[
+    InitialAckReceived(sid1,sak1),
+    InitialSessionCompleted(sid1,sak1)
+  ]->
+  [ !InitialDone(cak,sid1,sak1) ]
+
+// KeyServer, ilk oturum tamamlandıktan sonra yeni bir SAK ile rekey işlemini başlatır.
+rule Rekey_KeyServer_Send:
+  
+let
+  kek = kdf(cak,'KEK')
+  ick = kdf(cak,'ICK')
+  sak2 = kdf(cak,~sid2)
+  payload2 = <~sid2,sak2>
+  c2 = senc(payload2,kek)
+  icv2 = mac(<c2,~sid2>,ick)
+  in
+  [ !SharedCAK(cak), !InitialDone(cak,sid1,sak1), Fr(~sid2) ]--[
+    SentRekeySAK(~sid2,sak2),
+    SecretSAK(~sid2,sak2),
+    RekeyStarted(~sid2)
+  ]->
+  [ Out(<c2,icv2>),
+    RekeyPending(cak,~sid2,sak2),
+    !StoredSAK(~sid2,sak2) ]
+
+// Server, rekey SAK'ını alır, doğrular, çözer ve bir onay gönderir.
+rule Rekey_Server_Receive:
+  
+let
+  kek = kdf(cak,'KEK')
+  ick = kdf(cak,'ICK')
+  payload2 = sdec(c2,kek)
+  sid2 = fst(payload2)
+  sak2 = snd(payload2)
+in
+  [ In(<c2,icv2>), !SharedCAK(cak) ]--[
+    _restrict(macverify(icv2,<c2,sid2>,ick)=mactrue),
+    RekeySessionEstablished(sid2,sak2),
+    RekeyAckPrepared(sid2,sak2)
+  ]->
+  [ Out(mac(<sid2>,sak2)) ]
+
+// KeyServer, Server'dan rekey onayını alır ve rekey oturumunun başarıyla tamamlandığını işaretler.
+rule Rekey_KeyServer_Confirm:
+  [ RekeyPending(cak,sid2,sak2),
+    In(mac(<sid2>,sak2)) ]
+  --[
+    RekeyAckReceived(sid2,sak2),
+    RekeySessionCompleted(sid2,sak2)
+  ]->
+  [ !RekeyDone(cak,sid2,sak2) ]
+
+// CAK'ın saldırgan tarafından açığa çıkması için kullanılan ödün kuralı (güvenlik analizi için).
+rule Reveal_CAK:
+  [ !SharedCAK(cak) ]
+  --[ RevealCAK(cak) ]->
+  [ Out(cak) ]
+
+// SAK'ın saldırgan tarafından açığa çıkması için kullanılan ödün kuralı (güvenlik analizi için).
+rule Reveal_SAK:
+  [ !StoredSAK(sid,sak) ]
+  --[ RevealSAK(sid,sak) ]->
+  [ Out(sak) ]
+
+// Protokolün hem ilk oturum hem de rekey oturumunun başarıyla tamamlanabilir olduğunu kontrol eder.
+lemma executable:
+  exists-trace
+  "
+    Ex sid1 sak1 sid2 sak2 #i #j.
+      InitialSessionCompleted(sid1,sak1)@i
+      & RekeySessionCompleted(sid2,sak2)@j
+  "
+
+// İlk oturumda tamamlanan SAK'ın gerçekten KeyServer tarafından gönderildiğini doğrular.
+lemma initial_agreement:
+  "
+  All sid sak #i.
+    InitialSessionCompleted(sid,sak)@i
+    ==>
+    (Ex #j. SentInitialSAK(sid,sak)@j)
+  "
+
+// Rekey oturumunda tamamlanan SAK'ın gerçekten KeyServer tarafından gönderildiğini doğrular.
+lemma rekey_agreement:
+  "
+  All sid sak #i.
+    RekeySessionCompleted(sid,sak)@i
+    ==>
+    (Ex #j. SentRekeySAK(sid,sak)@j)
+  "
+
+// İlk oturumda aynı SAK için tekil bir tamamlanma olduğunu ve replay saldırısı olmadığını garanti eder.
+lemma injective_initial_agreement:
+  "
+  All sid sak #i.
+    InitialSessionCompleted(sid,sak)@i
+    ==>
+    (Ex #j.
+      SentInitialSAK(sid,sak)@j
+      &
+      (All #k.
+        InitialSessionCompleted(sid,sak)@k
+        ==> #k = #i))
+  "
+
+// Rekey oturumunda aynı SAK için tekil bir tamamlanma olduğunu ve replay saldırısı olmadığını garanti eder.
+lemma injective_rekey_agreement:
+  "
+  All sid sak #i.
+    RekeySessionCompleted(sid,sak)@i
+    ==>
+    (Ex #j.
+      SentRekeySAK(sid,sak)@j
+      &
+      (All #k.
+        RekeySessionCompleted(sid,sak)@k
+        ==> #k = #i))
+  "
+
+// İlk oturumda KeyServer'ın Server'dan bir onay (ACK) aldığını doğrular.
+lemma initial_key_confirmation:
+  "
+  All sid sak #i.
+    InitialSessionCompleted(sid,sak)@i
+    ==>
+    (Ex #j. InitialAckReceived(sid,sak)@j)
+  "
+
+// Rekey oturumunda KeyServer'ın Server'dan bir onay (ACK) aldığını doğrular.
+lemma rekey_key_confirmation:
+  "
+  All sid sak #i.
+    RekeySessionCompleted(sid,sak)@i
+    ==>
+    (Ex #j. RekeyAckReceived(sid,sak)@j)
+  "
+
+// İlk oturumun SAK'ı açığa çıkarılmadığı sürece saldırganın öğrenemeyeceğini garanti eder.
+lemma initial_sak_secrecy_no_reveal:
+  "
+  All sid sak #i.
+    InitialSessionCompleted(sid,sak)@i
+    & not(Ex #j. RevealSAK(sid,sak)@j)
+    ==>
+    not(Ex #k. K(sak)@k)
+  "
+/*
+// Rekey oturumunun SAK'ı açığa çıkarılmadığı sürece saldırganın öğrenemeyeceğini garanti eder.
+lemma rekey_sak_secrecy_no_reveal:
+  "
+  All sid sak #i.
+    RekeySessionCompleted(sid,sak)@i
+    & not(Ex #j. RevealSAK(sid,sak)@j)
+    ==>
+    not(Ex #k. K(sak)@k)
+  "
+*/
+// CAK açığa çıkarılmadığı sürece saldırganın öğrenemeyeceğini garanti eder.
+lemma cak_secrecy_no_reveal:
+  "
+  All cak #i.
+    CAKSetup(cak)@i
+    & not(Ex #j. RevealCAK(cak)@j)
+    ==>
+    not(Ex #k. K(cak)@k)
+  "
+
+// Rekey oturumunun her zaman ilk oturumdan sonra gerçekleştiğini doğrular (sıralı rekey garantisi).
+lemma rekey_after_initial_completion:
+  "
+  All sid2 sak2 #i.
+    RekeySessionCompleted(sid2,sak2)@i
+    ==>
+    (Ex sid1 sak1 #j.
+      InitialSessionCompleted(sid1,sak1)@j
+      & #j < #i)
+  "
+
+end

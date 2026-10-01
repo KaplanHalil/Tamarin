@@ -1,0 +1,483 @@
+/*
+***** Simplified MKA Protocol with Rekey *****
+
+KeyServer                                                  Server
+    |                                                         |
+    |========== Pre-Shared CAK ==============================>|
+    |                                                         |
+    | KEK = KDF(CAK, "KEK")                                   |
+    | ICK = KDF(CAK, "ICK")                                   |
+    | MN_KS = GenMN($KeyServer)                               |
+    | MN_S = GenMN($Server)                                   |    
+    | MN_KS1 = count(MN_KS)                                   |
+    | Fr(KS_nonce0)                                           |
+    | Fr(KN)                                                  |
+    | SAK1 = KDF(CAK, <$Keyserver, KN, KS_nonce0 >)           |                                         
+    | C1   = Enc(SAK1, KEK)                                   |
+    | ICV1 = MAC(<$Keyserver, MN_KS1, KN, C1>, ICK)           |
+    | MKAPDU0_keyserver = <$Keyserver, MN_KS1, KN, C1, ICV1>  |
+    | KSSTATE0(MN_KS1,MN_S, KN, SAK1)                         |
+    |                                                         |
+    |--------------------(MKAPDU0_keyserver)----------------->|
+    |                                                         |
+    |                                    ICK = KDF(CAK, "ICK")|
+    |                                    KEK = KDF(CAK, "KEK")|
+    |                                MN_KS = GenMN($KeyServer)|
+    |                                    MN_S = GenMN($Server)| 
+    |                          restrict(MN_KS1 = count(MN_KS))|
+    |                                restrict(ICV1 mac verify)|
+    |                                           SAK1 = Dec(C1)|
+    |                      ICV2 = MAC(<$Server, MN1, KN>, ICK)|
+    |                                      MN_S1 = count(MN_S)|
+    |              MKAPDU0_server = <$Server, MN_S1, KN, ICV2>|
+    |                          SState(MN_KS1, MN_S1, KN, SAK1)|
+    |							                              |              
+    |<--------------------(MKAPDU0_server)--------------------|
+    | In(KSSTATE0(MN_KS1,MN_S, KN, SAK1))                     |
+    | restrict(MN_S1 = Count(MN_S))                           |
+    | restrict(ICV2 MAC verify)                               |
+    | restrict(KN(in KS state)= KN)                           |
+    | KSTATE1(MN_KS1, MN_S1, KN, SAK1)                        |
+    |                                                         |
+    |============= Shared Fresh SAK1 =========================|
+    |                                                         |
+    |------------ Periodic Rekey Trigger ---------------------|
+    | In(KSSTATE1(MN_KS1, MN_S1, KN, SAK1))                   |
+    | KEK = KDF(CAK, "KEK")                                   |
+    | ICK = KDF(CAK, "ICK")                                   |
+    | MN_KS2  = Count(MN_KS1)                                 |
+    | Fr(KS_nonce1)                                           |
+    | KN1  = Count(KN)                                        |
+    | SAK2 = KDF(CAK, <$Keyserver, KN1, KS_nonce1>)           |
+    | C2   = Enc(SAK2, KEK)                                   |
+    | ICV3 = MAC(<$Keyserver, MN_KS2, KN1, C2>, ICK)          |
+    | MKAPDU1_keyserver = <$Keyserver, MN_KS2, KN1, C2, ICV3> |
+    | KSTATE2(MN_KS2, MN_S1, KN1, SAK2 )     |
+    |                                                         |    
+    |--------------------(MKAPDU1_keyserver)----------------->|
+    |                      In(SState(MN_KS1, MN_S1, KN, SAK1))|
+    |                                    ICK = KDF(CAK, "ICK")|
+    |                                    KEK = KDF(CAK, "KEK")|
+    |                                restrict(ICV3 mac verify)|
+    |                         restrict(MN_KS2 = count(MN_KS1))|
+    |                                restrict(KN1 = count(KN))|
+    |                                           SAK2 = Dec(C2)|
+    |                                     MN_S2 = Count(MN_S1)|
+    |                   ICV4 = MAC(<$Server, MN_S2, KN1>, ICK)|
+    |             MKAPDU1_server = <$Server, MN_S2, KN1, ICV4>|
+    |                                                         |
+    |<--------------------(MKAPDU1_server)--------------------|
+    | In(KSSTATE2(MN_KS2, MN_S1, KN1, SAK2))|                      
+    | restrict(MN_S2 = Count(MN_S1))                          |
+    | restrict(KN1 = KN1(In KS state))                        |
+    |                                                         |
+    |============= Shared Fresh SAK2 =========================|
+    |                                                         |
+    |============= DONE ======================================|
+*/
+
+theory MKA_v10
+
+begin
+
+builtins: symmetric-encryption, natural-numbers 
+
+functions:
+  kdf/2,
+  count/1,
+  mac/2,
+  macverify/3,
+  mactrue/0,
+  genMN/1
+
+equations:
+  macverify(mac(M,K),M,K) = mactrue
+
+// Paylaşılan CAK'ı sisteme yükler ve uzun vadeli bir gerçek olarak depolar.
+rule Setup_CAK:
+  [ Fr(~cak) ]
+  --[ CAKSetup(~cak) ]->
+  [ !SharedCAK(~cak) ]
+
+// KeyServer, ilk oturum için SAK'ı türetir, KEK ile şifreler, ICK ile MAC'lar ve Server'a gönderir.
+rule Initial_KeyServer_Send:
+  let
+    kek = kdf(~cak,'KEK')
+    ick = kdf(~cak,'ICK')
+    mn_ks = genMN($Keyserver)
+    mn_s = genMN($Server)
+    mn_ks1 = count(mn_ks)
+    sak1 = kdf(~cak,<$Keyserver, ~kn, ~KS_nonce0>)
+    c1 = senc(sak1,kek)
+    icv1 = mac(<$Keyserver, mn_ks1, ~kn, c1 >, ick)
+  in
+  [ !SharedCAK(~cak), Fr(~kn), Fr(~KS_nonce0) ]--[
+    SentInitialSAK(mn_ks1, ~kn, sak1),
+    KDFGeneratedSAK(sak1)
+  ]->
+  [ Out(<$Keyserver, mn_ks1, ~kn, c1, icv1>),
+    KSSTATE0(mn_ks1, mn_s, ~kn, sak1) ]
+
+// Server, gelen şifreli yükü doğrular, MAC'ı kontrol eder, SAK'ı çözer ve bir onay (ACK) gönderir.
+rule Initial_Server_Receive:
+  let
+    kek = kdf(~cak,'KEK')
+    ick = kdf(~cak,'ICK')
+    mn_ks = genMN($Keyserver)
+    mn_s = genMN($Server)
+    mn_s1 = count(mn_s)
+    sak1 = sdec(c1,kek)
+    icv2 = mac(<$Server, mn_s1, ~kn>, ick)
+  in
+  [ In(<$Keyserver,mn_ks1,~kn,c1,icv1>), !SharedCAK(~cak) ]--[
+    _restrict(macverify(icv1,<$Keyserver, mn_ks1, ~kn ,c1>,ick)=mactrue),
+    _restrict(mn_ks1 = count(mn_ks)),
+    InitialAckPrepared(mn_s1, ~kn),
+    ServerAcceptedSAK(sak1)
+  ]->
+  [ Out(<$Server,mn_s1,~kn,icv2>),
+    SSTATE0(mn_ks1, mn_s1, ~kn, sak1) ]
+
+// KeyServer, Server'dan gelen onayı alır ve ilk oturumun başarıyla tamamlandığını işaretler.
+rule Initial_KeyServer_Confirm:
+  let
+    ick = kdf(~cak,'ICK')
+  in
+  [ 
+    In(<$Server,mn_s1,kn_server,icv2>),
+    !SharedCAK(~cak),
+    KSSTATE0(mn_ks1, mn_s, ~kn, sak1)  ]--[
+    _restrict(macverify(icv2,<$Server, mn_s1, ~kn>,ick)=mactrue),
+    _restrict(~kn = kn_server),
+    _restrict(mn_s1 = count(mn_s)),
+    InitialSessionCompleted(mn_ks1, mn_s1, ~kn, sak1)
+
+    
+  ]->
+  [ 
+    KSSTATE1(mn_ks1, mn_s1, ~kn, sak1) ]
+
+// KeyServer, ilk oturum tamamlandıktan sonra yeni bir SAK ile rekey işlemini başlatır.
+rule Rekey_KeyServer_Send:
+  let
+    kek = kdf(~cak,'KEK')
+    ick = kdf(~cak,'ICK')
+    mn_ks2 = count(mn_ks1)
+    kn1 = count(~kn)
+    sak2 = kdf(~cak,<$Keyserver, kn1, ~KS_nonce1>)
+    c2 = senc(sak2,kek)
+    icv3 = mac(<$Keyserver,mn_ks2,kn1,c2>,ick)
+  in
+  [ !SharedCAK(~cak), KSSTATE1(mn_ks1, mn_s1, ~kn, sak1), Fr(~KS_nonce1) ]--[
+    SentRekeySAK(mn_ks2, kn1, sak2),
+    RekeyStarted(mn_ks2, kn1, sak2),
+    RekeyMessage(mn_ks2, kn1, c2, icv3)
+  ]->
+  [ Out(<$Keyserver,mn_ks2,kn1,c2,icv3>),
+    KSSTATE2(mn_ks2, mn_s1, kn1, sak2) ]
+
+// Server, rekey SAK'ını alır, doğrular, çözer ve bir onay gönderir.
+rule Rekey_Server_Receive:
+  let
+    kek = kdf(~cak,'KEK')
+    ick = kdf(~cak,'ICK')
+    sak2 = sdec(c2,kek)
+    mn_s2 = count(mn_s1)
+    icv4 = mac(<$Server,mn_s2,kn1>,ick)
+  in
+  [ In(<$Keyserver,mn_ks2,kn1,c2,icv3>), !SharedCAK(~cak), SSTATE0(mn_ks1, mn_s1, ~kn, sak1) ]--[
+    _restrict(mn_ks2 = count(mn_ks1)),
+    _restrict(macverify(icv3,<$Keyserver, mn_ks2, kn1, c2>,ick)=mactrue),
+    _restrict(kn1 = count(~kn)),
+    RekeyAckPrepared(mn_ks2, kn1, sak2)
+    
+  ]->
+  [ Out(<$Server,mn_s2,kn1,icv4>),
+    SSTATE1(mn_ks2, mn_s2, kn1, sak2) ]
+
+// KeyServer, Server'dan rekey onayını alır ve rekey oturumunun başarıyla tamamlandığını işaretler.
+rule Rekey_KeyServer_Confirm:
+  let
+    ick = kdf(~cak,'ICK')
+  in
+  [ 
+    In(<$Server,mn_s2,kn1,icv4>),
+    !SharedCAK(~cak),
+    KSSTATE2(mn_ks2, mn_s1, kn1, sak2)  ]--[
+    _restrict(mn_s2 = count(mn_s1)),
+    _restrict(macverify(icv4,<$Server, mn_s2, kn1>,ick)=mactrue),
+    RekeySessionCompleted(mn_ks2, mn_s2, kn1, sak2)
+    
+  ]->
+  [ ]
+
+// SAK'ın saldırgan tarafından açığa çıkması için kullanılan ödün kuralı.
+rule Reveal_SAK:
+  [ KSSTATE0(mn_ks,mn_s,kn,sak) ]
+  --[ RevealSAK(mn_ks,mn_s,kn,sak) ]->
+  [ Out(sak) ]
+
+// CAK'ın saldırgan tarafından açığa çıkması için kullanılan ödün kuralı.
+rule Reveal_CAK:
+  [ !SharedCAK(~cak) ]
+  --[ RevealCAK(~cak) ]->
+  [ Out(~cak) ]
+
+
+rule Malicious_KeyServer_Send:
+
+  let
+      kek = kdf(~cak,'KEK')
+      ick = kdf(~cak,'ICK')
+
+      mn_ks = genMN($Keyserver)
+      mn_ks1 = count(mn_ks)
+
+      c1 = senc(~fakeSAK,kek)
+      icv1 = mac(<$Keyserver,mn_ks1,~kn,c1>,ick)
+
+  in
+
+  [ !SharedCAK(~cak),
+    Fr(~fakeSAK),
+    Fr(~kn)
+  ]
+
+  --[
+      MaliciousSAKSent(~fakeSAK)
+  ]->
+
+  [
+      Out(<$Keyserver,mn_ks1,~kn,c1,icv1>)
+  ]
+
+
+// Bu lemma, modelin en az bir trace üzerinde çalıştığını gösterir:
+// İlk oturum tamamlanıp ardından rekey oturumu da tamamlanan bir yürüyüşün var olduğunu söyler.
+lemma executable:
+exists-trace
+"
+Ex mn_ks1 mn_s1 kn sak1 mn_ks2 mn_s2 kn1 sak2 #i #j.
+    InitialSessionCompleted(mn_ks1,mn_s1,kn,sak1)@i
+  & RekeySessionCompleted(mn_ks2,mn_s2,kn1,sak2)@j
+"
+
+// İlk oturum başarıyla tamamlandığında, aynı SAK'ın daha önce KeyServer tarafından gönderilmiş
+// olması gerektiğini ifade eder; yani tamamlanan oturumun gerçekten başlatılmış bir oturum olduğunu doğrular.
+lemma initial_agreement:
+"
+All mn_ks1 mn_s1 kn sak1 #i.
+
+InitialSessionCompleted(mn_ks1,mn_s1,kn,sak1)@i
+
+==>
+
+(Ex #j.
+    SentInitialSAK(mn_ks1,kn,sak1)@j
+  & #j < #i)
+"
+
+// Rekey oturumu tamamlandığında, bu rekey'in KeyServer tarafından başlatılmış olduğunu
+// garanti eder; yani tamamlanma öncesinde rekey mesajı üretildiğini söyler.
+lemma rekey_agreement:
+"
+All mn_ks2 mn_s2 kn1 sak2 #i.
+
+RekeySessionCompleted(mn_ks2,mn_s2,kn1,sak2)@i
+
+==>
+
+(Ex #j.
+    RekeyStarted(mn_ks2,kn1,sak2)@j
+  & #j < #i)
+"
+
+// CAK ifşa edilmediyse, ilk oturumun tamamlanması durumunda Server tarafının
+// en azından initial ACK hazırladığını gerektirir; böylece Server'ın kimlik doğrulamasını test eder.
+lemma server_authentication_initial:
+"
+All mn_ks1 mn_s1 kn sak1 #i.
+
+InitialSessionCompleted(mn_ks1,mn_s1,kn,sak1)@i
+&
+not(Ex cak #k. RevealCAK(cak)@k)
+
+==>
+
+(Ex #j.
+    InitialAckPrepared(mn_s1,kn)@j
+  & #j < #i)
+"
+
+// Aynı güvenlik özelliğini rekey aşaması için tekrar eder:
+// CAK açıklanmadığı durumda, rekey tamamlandığında Server'ın rekey ACK'ini hazırladığı gösterilir.
+lemma server_authentication_rekey:
+"
+All mn_ks2 mn_s2 kn1 sak2 #i.
+
+RekeySessionCompleted(mn_ks2,mn_s2,kn1,sak2)@i
+&
+not(Ex cak #k. RevealCAK(cak)@k)
+
+==>
+
+(Ex #j.
+    RekeyAckPrepared(mn_ks2,kn1,sak2)@j
+  & #j < #i)
+"
+
+// İlk oturum için SAK gizlidir: SAK kendisi ve CAK açıklanmadığı sürece, saldırganın SAK'ı öğrenemeyeceğini söyler.
+lemma initial_sak_secrecy_no_reveal:
+"
+All mn_ks1 mn_s1 kn sak1 #i.
+
+InitialSessionCompleted(mn_ks1,mn_s1,kn,sak1)@i
+&
+not(Ex #k.
+    RevealSAK(mn_ks1,mn_s1,kn,sak1)@k)
+&
+not(Ex cak #l.
+    RevealCAK(cak)@l)
+
+==>
+
+not(Ex #m.
+    K(sak1)@m)
+"
+
+// Rekey SAK'ı için aynı gizlilik garantisini kurar:
+// SAK ve CAK açıklanmadığı durumda rekey SAK'ı da saldırganın bilgi edinmesinden korunur.
+lemma rekey_sak_secrecy_no_reveal:
+"
+All mn_ks2 mn_s2 kn1 sak2 #i.
+
+RekeySessionCompleted(mn_ks2,mn_s2,kn1,sak2)@i
+&
+not(Ex #k.
+    RevealSAK(mn_ks2,mn_s2,kn1,sak2)@k)
+&
+not(Ex cak #l.
+    RevealCAK(cak)@l)
+
+==>
+
+not(Ex #m.
+    K(sak2)@m)
+"
+
+// Rekey işlemi, mutlaka önceki ilk oturumun tamamlanmasının ardından başlayabilir.
+// Bu lemma, “önce rekey başlatılır, sonra initial tamamlanır” gibi anomalileri dışlar.
+lemma rekey_cannot_start_before_initial_completion:
+"
+All mn_ks2 kn1 sak2 #i.
+
+RekeyStarted(mn_ks2,kn1,sak2)@i
+
+==>
+
+Ex mn_ks1 mn_s1 kn sak1 #j.
+
+InitialSessionCompleted(mn_ks1,mn_s1,kn,sak1)@j
+&
+#j < #i
+"
+
+// Rekey tamamlanmışsa, en azından önce initial oturumun tamamlanmış olması gerektiğini ifade eder.
+// Yani sistemin rekey'i sadece kurulu bir önceki oturum üzerine yapmasını sağlar.
+lemma rekey_after_initial_completion:
+"
+All mn_ks2 mn_s2 kn1 sak2 #i.
+
+RekeySessionCompleted(mn_ks2,mn_s2,kn1,sak2)@i
+
+==>
+
+Ex mn_ks1 mn_s1 kn sak1 #j.
+
+InitialSessionCompleted(mn_ks1,mn_s1,kn,sak1)@j
+&
+#j < #i
+"
+
+// Rekey sonrası elde edilen yeni SAK'ın, ilk SAK ile aynı olmaması gerektiğini söyler.
+// Böylece key update'in gerçekten yeni bir anahtar üretimini temsil ettiğini test eder.
+lemma key_update:
+"
+All mn_ks1 mn_s1 kn sak1
+    mn_ks2 mn_s2 kn1 sak2
+    #i #j.
+
+InitialSessionCompleted(mn_ks1,mn_s1,kn,sak1)@i
+&
+RekeySessionCompleted(mn_ks2,mn_s2,kn1,sak2)@j
+
+==>
+
+not(sak1 = sak2)
+"
+
+// Rekey sonrası key number (KN) değerinin, initial oturum key number'dan türetildiğini doğrular.
+// Yani key count akışı ve ilerleyişin tutarlı olduğunu göstermeyi amaçlar.
+lemma key_number_progress:
+"
+All mn_ks2 mn_s2 kn1 sak2 #i.
+
+RekeySessionCompleted(mn_ks2,mn_s2,kn1,sak2)@i
+
+==>
+
+Ex kn mn_ks1 mn_s1 sak1 #j.
+
+InitialSessionCompleted(mn_ks1,mn_s1,kn,sak1)@j
+&
+kn1 = count(kn)
+"
+
+// Rekey SAK'ı yeni bir SAK olmalı, ama aynı SAK'ın initial oturumda da görülmemelidir.
+// Bu, rekey sırasında “aynı anahtarı yeniden kullanma” senaryosunu dışlar.
+lemma fresh_rekey_key:
+"
+All mn_ks2 mn_s2 kn1 sak2 #i.
+
+RekeySessionCompleted(mn_ks2,mn_s2,kn1,sak2)@i
+
+==>
+
+not(
+ Ex mn_ks1 mn_s1 kn #j.
+
+ InitialSessionCompleted(mn_ks1,mn_s1,kn,sak2)@j
+)
+"
+
+// Bu exists-trace lemma, Server'ın sadece KDF üretimiyle gelen SAK'ları kabul etmesi gerektiğini
+// savunan güvenlik hedefinin, modelde gerçekten bozulabileceğini gösteren karşı örneği ifade eder.
+lemma server_only_accepts_kdf_keys:
+exists-trace
+"
+Ex sak #i.
+
+ServerAcceptedSAK(sak)@i
+&
+not(Ex #j.
+    KDFGeneratedSAK(sak)@j)
+"
+
+// Server'ın kötü niyetli/malicious bir SAK'ı kabul edebildiğini gösteren varlık lemma'sıdır.
+// Bu, protokoldeki kabul mekanizmasının zayıf olabileceğini gösterir.
+lemma accepts_non_kdf_sak:
+
+exists-trace
+"
+
+Ex sak #i #j.
+
+    MaliciousSAKSent(sak)@i
+&
+    ServerAcceptedSAK(sak)@j
+&
+    #i < #j
+
+"
+
+end

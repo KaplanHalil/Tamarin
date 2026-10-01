@@ -1,0 +1,15 @@
+\section{Verification Results}
+\label{sec:results}
+
+We verified the model with Tamarin and obtained proofs for the main safety and authentication lemmas. The executable lemma succeeds, showing that the modeled protocol can run to completion under the adversary. The agreement and authentication lemmas also hold, indicating that the Key Server and Server agree on the session parameters and that the Server only accepts a session after the expected protocol step has occurred.
+
+The secrecy lemmas hold whenever the CAK is not revealed. In other words, the derived SAKs remain unknown to the adversary unless the shared long-term secret is compromised. The ordering lemmas also succeed, confirming that rekeying cannot occur before an initial session is completed and that the KN/MN counters advance monotonically.
+
+The most interesting result is the existence of an attack trace for the acceptance condition. Tamarin finds a trace in which a malicious Key Server sends a well-formed MKAPDU carrying an arbitrary fresh SAK. Because the MAC is computed with the ICK derived from the shared CAK, the Server accepts the message and records the injected SAK as valid. This is not a break of the underlying cryptographic primitives; rather, it exposes a structural limitation of the protocol's trust model. The Server has no independent proof that the SAK was generated through the prescribed KDF path, so a compromised or malicious Key Server can silently substitute its own value.
+
+\subsection{Related Work}
+\label{sec:related}
+
+Formal verification has become standard for protocol analysis. Classical examples include Lowe's analysis of Needham--Schroeder with FDR~\cite{lowe1996breaking}, Blanchet's ProVerif-based work on authentication protocols~\cite{blanchet2001efficient}, and later Tamarin studies of TLS~1.3~\cite{cremers2017comprehensive}, Signal~\cite{kobeissi2017automated}, and WPA2~\cite{vanhoef2017key}. Within the IEEE 802 family, the closest related work concerns WPA2's 4-way handshake; however, the MKA key-agreement logic has received comparatively little machine-checked analysis.
+
+Our contribution is therefore complementary. To the best of our knowledge, this is the first machine-verified symbolic analysis of a simplified MKA exchange. The closest methodological precedent is the Tamarin analysis of TLS~1.3 by Cremers et al.~\cite{cremers2017comprehensive}, which similarly verifies authentication, secrecy, and ordering properties. Our work applies the same general methodology to the Ethernet security domain, where the role of the Key Server introduces a distinct acceptance semantics that is not present in classical protocol examples.
